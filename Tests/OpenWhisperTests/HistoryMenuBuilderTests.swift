@@ -37,16 +37,29 @@ import Testing
         let items = HistoryMenuBuilder.build(entries: [])
         #expect(items[0].title == "Sem transcrições")
         #expect(items[0].kind == .empty)
-        #expect(kinds(items).count == 3)
+        #expect(kinds(items).count == 5)
         #expect(kinds(items).contains(.clear))
+        #expect(kinds(items).contains(.settings))
+        #expect(kinds(items).contains(.about))
         #expect(kinds(items).contains(.quit))
     }
 
     @Test func fixedItemsAlwaysPresent() {
         let items = HistoryMenuBuilder.build(entries: [entry("texto")])
         #expect(kinds(items).contains(.clear))
+        #expect(kinds(items).contains(.settings))
+        #expect(kinds(items).contains(.about))
         #expect(kinds(items).contains(.quit))
         #expect(items.last?.title == "Sair")
+    }
+
+    @Test func bottomSectionOrderAfterHistory() {
+        let items = HistoryMenuBuilder.build(entries: [entry("texto")])
+        #expect(items[0].kind == .transcription(text: "texto"))
+        #expect(items[1].kind == .clear)
+        #expect(items[2].kind == .settings)
+        #expect(items[3].kind == .about)
+        #expect(items[4].kind == .quit)
     }
 
     @Test func transcriptionItemCarriesFullTextAsPayload() {

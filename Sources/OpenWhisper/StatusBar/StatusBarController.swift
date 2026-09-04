@@ -31,6 +31,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     private func populate(menu: NSMenu, with items: [MenuModel.Item]) {
         for item in items {
+            if item.kind == .settings || item.kind == .quit {
+                menu.addItem(.separator())
+            }
             let menuItem = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
             switch item.kind {
             case .transcription(let text):
@@ -44,6 +47,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
                 menuItem.target = self
                 menuItem.action = #selector(clearClicked(_:))
                 menuItem.isEnabled = !items.contains { if case .transcription = $0.kind { return true }; return false }
+            case .settings:
+                menuItem.target = self
+                menuItem.action = #selector(settingsClicked(_:))
+                menuItem.keyEquivalent = ","
+                menuItem.keyEquivalentModifierMask = .command
+            case .about:
+                menuItem.target = self
+                menuItem.action = #selector(aboutClicked(_:))
             case .quit:
                 menuItem.action = #selector(NSApplication.terminate(_:))
             }
@@ -58,5 +69,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     @objc private func clearClicked(_ sender: NSMenuItem) {
         model.clearHistory()
+    }
+
+    @objc private func settingsClicked(_ sender: NSMenuItem) {
+        SettingsWindowController.shared.show()
+    }
+
+    @objc private func aboutClicked(_ sender: NSMenuItem) {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(nil)
     }
 }

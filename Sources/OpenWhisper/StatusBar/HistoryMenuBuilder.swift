@@ -6,6 +6,8 @@ struct MenuModel: Equatable {
             case transcription(text: String)
             case empty
             case clear
+            case settings
+            case about
             case quit
         }
 
@@ -29,6 +31,8 @@ enum HistoryMenuBuilder {
             }
         }
         items.append(MenuModel.Item(title: "Limpar histórico", kind: .clear))
+        items.append(MenuModel.Item(title: "Configurações…", kind: .settings))
+        items.append(MenuModel.Item(title: "Sobre OpenWhisper", kind: .about))
         items.append(MenuModel.Item(title: "Sair", kind: .quit))
         return items
     }
