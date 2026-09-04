@@ -4,9 +4,10 @@ enum FailureReason: Error, Equatable {
     case permissionDenied
     case recognitionUnavailable
     case engineError(String)
+    case noSpeech
 }
 
-protocol DictationService: AnyObject {
+protocol DictationService: AnyObject, Sendable {
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) async
 
     func start() async throws

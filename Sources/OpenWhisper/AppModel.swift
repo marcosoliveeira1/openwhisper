@@ -1,0 +1,102 @@
+import Foundation
+import SwiftUI
+
+enum DictationState: Equatable {
+    case idle
+    case recording(startedAt: Date)
+    case transcribing
+    case failed(FailureReason)
+}
+
+@MainActor
+final class AppModel: ObservableObject {
+    @Published private(set) var state: DictationState = .idle
+    @Published private(set) var liveTranscript = ""
+
+    private let dictation: any DictationService
+    private let clipboard: any Clipboard
+    private let store: TranscriptionStore
+
+    init(dictation: any DictationService, clipboard: any Clipboard, store: TranscriptionStore) {
+        self.dictation = dictation
+        self.clipboard = clipboard
+        self.store = store
+        Task {
+            await dictation.setPartialHandler { [weak self] text in
+                Task { @MainActor in
+                    self?.liveTranscript = text
+                }
+            }
+        }
+    }
+
+    func toggle() {
+        switch state {
+        case .idle, .failed:
+            startDictation()
+        case .recording:
+            finishDictation()
+        case .transcribing:
+            break
+        }
+    }
+
+    func finish() {
+        finishDictation()
+    }
+
+    func cancel() {
+        guard state != .idle else { return }
+        Task {
+            await dictation.cancel()
+        }
+        state = .idle
+        liveTranscript = ""
+    }
+
+    func copyToClipboard(_ text: String) {
+        clipboard.copy(text)
+    }
+
+    func clearHistory() {
+        Task {
+            await store.clear()
+        }
+    }
+
+    private func startDictation() {
+        liveTranscript = ""
+        state = .recording(startedAt: Date())
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await dictation.start()
+            } catch let reason as FailureReason {
+                state = .failed(reason)
+            } catch {
+                state = .failed(.engineError(error.localizedDescription))
+            }
+        }
+    }
+
+    private func finishDictation() {
+        guard case .recording = state else { return }
+        state = .transcribing
+        Task { [weak self] in
+            guard let self else { return }
+            let text = await dictation.finish()
+            await completeFinish(text: text ?? "")
+        }
+    }
+
+    private func completeFinish(text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            state = .failed(.noSpeech)
+            return
+        }
+        clipboard.copy(trimmed)
+        await store.add(trimmed)
+        state = .idle
+    }
+}
