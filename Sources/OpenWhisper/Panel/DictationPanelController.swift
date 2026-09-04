@@ -31,6 +31,7 @@ final class DictationPanelController {
         panel.hasShadow = true
 
         let hostingView = NSHostingView(rootView: DictationView(model: model))
+        hostingView.sizingOptions = [.preferredContentSize]
         panel.contentView = hostingView
 
         cancellable = model.$state
@@ -46,7 +47,7 @@ final class DictationPanelController {
 
     private func present() {
         if !panel.isVisible {
-            positionAtTopCenter()
+            positionAtCenter()
             panel.orderFront(nil)
         }
         installEscMonitor()
@@ -57,13 +58,16 @@ final class DictationPanelController {
         removeEscMonitor()
     }
 
-    private func positionAtTopCenter() {
+    private func positionAtCenter() {
         guard let screen = NSScreen.main else { return }
         let visible = screen.visibleFrame
         let size = panel.frame.size
-        let x = visible.midX - size.width / 2
-        let y = visible.maxY - size.height - 24
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.setFrameOrigin(
+            NSPoint(
+                x: visible.midX - size.width / 2,
+                y: visible.midY - size.height / 2
+            )
+        )
     }
 
     private func installEscMonitor() {
