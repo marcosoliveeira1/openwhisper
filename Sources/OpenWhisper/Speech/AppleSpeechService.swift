@@ -12,12 +12,14 @@ actor AppleSpeechService: DictationService {
     private var accumulated = ""
     private var finalContinuation: CheckedContinuation<String?, Never>?
     private var resolved = false
+    private var configObserver: NSObjectProtocol?
 
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) {
         onPartial = handler
     }
 
     func start() async throws {
+        installConfigurationObserverIfNeeded()
         guard try await authorize() else {
             throw FailureReason.permissionDenied
         }
@@ -97,6 +99,25 @@ actor AppleSpeechService: DictationService {
 
     private func handleFailure() {
         resolve(with: accumulated.isEmpty ? nil : accumulated)
+    }
+
+    private func installConfigurationObserverIfNeeded() {
+        guard configObserver == nil else { return }
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: audioEngine,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.handleEngineStopped()
+            }
+        }
+    }
+
+    private func handleEngineStopped() {
+        guard task != nil else { return }
+        handleFailure()
     }
 
     private func resolveTimeout() {
