@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenWhisper - Native Voice-to-Text for macOS | Auto-Paste Dictation</title>
+    <meta name="description" content="OpenWhisper is a free, open-source, native macOS dictation app. Press a hotkey, speak, and your words are transcribed and auto-pasted into any app. Lightweight tray app, zero third-party dependencies.">
+    <meta name="keywords" content="voice to text mac, speech to text macos, free dictation app mac, dictation macos, mac voice typing, auto paste dictation, menu bar dictation app">
+    <link rel="canonical" href="https://marcosoliveira1.github.io/openwhisper/">
+
+    <meta property="og:title" content="OpenWhisper - Native Voice-to-Text for macOS">
+    <meta property="og:description" content="Press a hotkey, speak, done. Native macOS dictation with auto-paste, history and a configurable global hotkey. Free and open-source.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://marcosoliveira1.github.io/openwhisper/">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "OpenWhisper",
+        "description": "Free, open-source, native macOS dictation app with global hotkey, live transcript, clipboard auto-copy and auto-paste.",
+        "url": "https://marcosoliveira1.github.io/openwhisper/",
+        "downloadUrl": "https://github.com/marcosoliveira1/openwhisper",
+        "operatingSystem": "macOS 15.0 or later",
+        "applicationCategory": "UtilitiesApplication",
+        "softwareVersion": "0.1.0",
+        "author": {
+            "@type": "Person",
+            "name": "Marcos Oliveira",
+            "url": "https://github.com/marcosoliveira1"
+        },
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "featureList": [
+            "Global configurable hotkey",
+            "Live transcript with timer",
+            "Auto-copy and auto-paste",
+            "Tray history with click-to-copy",
+            "Configurable history limit",
+            "On-device speech recognition when available",
+            "Menu bar app, no Dock icon",
+            "Zero third-party dependencies"
+        ],
+        "softwareRequirements": "Apple Silicon Mac, macOS 15.0 or later"
+    }
+    </script>
+
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #1e2a45;
+            --teal: #14b8a6;
+            --teal-dark: #0d9488;
+            --teal-glow: rgba(20, 184, 166, 0.15);
+            --white: #f8fafc;
+            --gray-100: #e2e8f0;
+            --gray-300: #94a3b8;
+            --gray-500: #64748b;
+            --gray-700: #334155;
+            --green: #22c55e;
+            --red: #ef4444;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-stack);
+            background: var(--bg-primary);
+            color: var(--gray-100);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a { color: var(--teal); text-decoration: none; transition: color 0.2s; }
+        a:hover { color: var(--teal-dark); }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            background: rgba(26, 26, 46, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(20, 184, 166, 0.12);
+            z-index: 100;
+            padding: 0 24px;
+        }
+
+        nav .nav-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+        }
+
+        .nav-logo { font-size: 1.25rem; font-weight: 700; color: var(--white); letter-spacing: -0.02em; }
+        .nav-logo span { color: var(--teal); }
+
+        .nav-links { display: flex; gap: 28px; list-style: none; }
+        .nav-links a { color: var(--gray-300); font-size: 0.875rem; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--teal); }
+
+        .nav-github {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--teal);
+            color: var(--bg-primary) !important;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .nav-github:hover { background: var(--teal-dark); color: var(--bg-primary) !important; }
+
+        .hero {
+            padding: 140px 0 80px;
+            text-align: center;
+            background: radial-gradient(ellipse at 50% 0%, rgba(20, 184, 166, 0.08) 0%, transparent 70%);
+        }
+
+        .hero-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            background: var(--teal-glow);
+            border: 1px solid rgba(20, 184, 166, 0.25);
+            border-radius: 20px;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--teal);
+            margin-bottom: 24px;
+            letter-spacing: 0.02em;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.25rem, 5vw, 3.5rem);
+            font-weight: 800;
+            color: var(--white);
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            margin-bottom: 20px;
+        }
+        .hero h1 .highlight { color: var(--teal); }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 2vw, 1.25rem);
+            color: var(--gray-300);
+            max-width: 640px;
+            margin: 0 auto 36px;
+            line-height: 1.6;
+        }
+
+        .hero-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--teal);
+            color: var(--bg-primary);
+            padding: 14px 32px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 700;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .hero-cta:hover {
+            background: var(--teal-dark);
+            color: var(--bg-primary);
+            transform: translateY(-1px);
+        }
+
+        .hero-meta {
+            margin-top: 24px;
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            font-size: 0.8125rem;
+            color: var(--gray-500);
+            flex-wrap: wrap;
+        }
+        .hero-meta span { display: flex; align-items: center; gap: 6px; }
+
+        section { padding: 80px 0; }
+
+        .section-label {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--teal);
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+            font-weight: 800;
+            color: var(--white);
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .section-desc {
+            font-size: 1.0625rem;
+            color: var(--gray-300);
+            max-width: 600px;
+            margin-bottom: 48px;
+        }
+
+        .section-center { text-align: center; }
+        .section-center .section-desc { margin-left: auto; margin-right: auto; }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 32px 28px;
+            transition: border-color 0.3s, transform 0.3s;
+        }
+        .feature-card:hover {
+            border-color: rgba(20, 184, 166, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .feature-icon {
+            width: 44px;
+            height: 44px;
+            background: var(--teal-glow);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+        .feature-icon svg {
+            width: 22px;
+            height: 22px;
+            stroke: var(--teal);
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .feature-card h3 { font-size: 1.0625rem; font-weight: 700; color: var(--white); margin-bottom: 8px; }
+        .feature-card p { font-size: 0.9rem; color: var(--gray-300); line-height: 1.6; }
+
+        .comparison-wrapper {
+            overflow-x: auto;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9375rem;
+            min-width: 600px;
+        }
+
+        .comparison-table thead th {
+            background: var(--bg-card);
+            padding: 16px 20px;
+            text-align: left;
+            font-weight: 700;
+            color: var(--white);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .comparison-table thead th:first-child { border-top-left-radius: 14px; }
+        .comparison-table thead th:last-child { border-top-right-radius: 14px; }
+
+        .comparison-table tbody td {
+            padding: 14px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: top;
+        }
+        .comparison-table tbody tr:last-child td { border-bottom: none; }
+
+        .comparison-table tbody td:first-child {
+            font-weight: 600;
+            color: var(--gray-100);
+            white-space: nowrap;
+        }
+
+        .comparison-table .col-ow { color: var(--teal); font-weight: 600; }
+        .comparison-table .col-cloud { color: var(--gray-500); }
+
+        .check { color: var(--green); font-weight: 700; }
+        .cross { color: var(--red); font-weight: 700; }
+
+        .install-steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .install-step {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 28px 24px;
+            position: relative;
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: var(--teal);
+            color: var(--bg-primary);
+            border-radius: 50%;
+            font-size: 0.875rem;
+            font-weight: 800;
+            margin-bottom: 16px;
+        }
+
+        .install-step h3 { font-size: 1rem; font-weight: 700; color: var(--white); margin-bottom: 8px; }
+        .install-step p { font-size: 0.875rem; color: var(--gray-300); line-height: 1.6; }
+
+        .code-block {
+            background: #0f172a;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 24px 28px;
+            overflow-x: auto;
+            font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
+            font-size: 0.875rem;
+            line-height: 1.8;
+            color: var(--gray-100);
+        }
+        .code-block .comment { color: var(--gray-500); }
+        .code-block .cmd { color: var(--teal); }
+
+        .faq-list { max-width: 760px; margin: 0 auto; }
+
+        .faq-item { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+        .faq-item:last-child { border-bottom: none; }
+
+        .faq-question {
+            width: 100%;
+            background: none;
+            border: none;
+            padding: 24px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            text-align: left;
+            gap: 16px;
+        }
+        .faq-question h3 {
+            font-size: 1.0625rem;
+            font-weight: 600;
+            color: var(--white);
+            font-family: var(--font-stack);
+        }
+        .faq-question:hover h3 { color: var(--teal); }
+
+        .faq-chevron {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            stroke: var(--gray-500);
+            fill: none;
+            stroke-width: 2;
+            transition: transform 0.3s;
+        }
+
+        .faq-item.open .faq-chevron { transform: rotate(180deg); }
+
+        .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+        .faq-item.open .faq-answer { max-height: 400px; }
+
+        .faq-answer p { padding: 0 0 24px; font-size: 0.9375rem; color: var(--gray-300); line-height: 1.7; }
+
+        footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 40px 0;
+            text-align: center;
+        }
+
+        .footer-logo { font-size: 1.125rem; font-weight: 700; color: var(--white); margin-bottom: 12px; }
+        .footer-logo span { color: var(--teal); }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .footer-links a { color: var(--gray-500); font-size: 0.875rem; font-weight: 500; }
+        .footer-links a:hover { color: var(--teal); }
+
+        .footer-copy { font-size: 0.8125rem; color: var(--gray-700); }
+
+        @media (max-width: 860px) {
+            .features-grid { grid-template-columns: repeat(2, 1fr); }
+            .install-steps { grid-template-columns: 1fr; }
+            .nav-links { display: none; }
+        }
+
+        @media (max-width: 560px) {
+            .features-grid { grid-template-columns: 1fr; }
+            .hero { padding: 120px 0 60px; }
+            .hero-meta { flex-direction: column; gap: 8px; align-items: center; }
+            section { padding: 60px 0; }
+        }
+    </style>
+</head>
+<body>
+
+<nav id="nav">
+    <div class="nav-inner">
+        <div class="nav-logo">Open<span>Whisper</span></div>
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#comparison">Compare</a></li>
+            <li><a href="#install">Install</a></li>
+            <li><a href="#faq">FAQ</a></li>
+        </ul>
+        <a href="https://github.com/marcosoliveira1/openwhisper" class="nav-github" rel="noopener" target="_blank">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+        </a>
+    </div>
+</nav>
+
+<section class="hero">
+    <div class="container">
+        <div class="hero-badge">Open Source &middot; MIT License</div>
+        <h1>Native <span class="highlight">Voice-to-Text</span> for macOS</h1>
+        <p class="hero-subtitle">
+            Press a hotkey, speak, done. Your words are transcribed, copied and
+            auto-pasted into the app you were using.
+            A lightweight menu bar app &mdash; zero third-party dependencies.
+        </p>
+        <a href="https://github.com/marcosoliveira1/openwhisper" class="hero-cta" rel="noopener" target="_blank">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            Get OpenWhisper on GitHub
+        </a>
+        <div class="hero-meta">
+            <span>macOS 15.0+</span>
+            <span>Apple Silicon</span>
+            <span>Native Apple Speech</span>
+            <span>Zero dependencies</span>
+        </div>
+    </div>
+</section>
+
+<section id="features">
+    <div class="container section-center">
+        <span class="section-label">Features</span>
+        <h2 class="section-title">Dictation that stays out of your way</h2>
+        <p class="section-desc">
+            OpenWhisper is a tiny menu bar app built on native macOS frameworks.
+            No Electron, no servers, no subscriptions &mdash; just press, speak and paste.
+        </p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </div>
+                <h3>Global Hotkey</h3>
+                <p>Default <strong>⌘⇧G</strong> opens a floating panel and starts recording instantly &mdash; from any app. Change it to any combination in Settings.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <h3>Live Transcript</h3>
+                <p>Watch your words appear in real time with a recording timer, in a clean centered panel with a soft frosted background.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><path d="M12 11v4"/><path d="M10 13h4"/></svg>
+                </div>
+                <h3>Auto-Copy &amp; Auto-Paste</h3>
+                <p>Finished text lands on your clipboard and is pasted straight into the app that was focused when you started. Cancel discards everything.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <h3>History at a Click</h3>
+                <p>Your last dictations live in the tray menu. Click any entry to copy it again. Keep between 1 and 500 entries &mdash; you decide.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                </div>
+                <h3>Private by Design</h3>
+                <p>Uses Apple's Speech framework with on-device recognition whenever your Mac supports it. No third-party servers, no telemetry.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                </div>
+                <h3>Ridiculously Light</h3>
+                <p>Native Swift app with zero third-party dependencies. Tray-only, no Dock icon, small binary. Built with SPM in one command.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="comparison" style="background: var(--bg-secondary);">
+    <div class="container">
+        <span class="section-label">Comparison</span>
+        <h2 class="section-title">OpenWhisper vs Subscription Dictation</h2>
+        <p class="section-desc">
+            Why settle for a monthly bill or another Electron app?
+        </p>
+        <div class="comparison-wrapper">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>OpenWhisper</th>
+                        <th>Subscription apps</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Cost</td>
+                        <td class="col-ow"><span class="check">&#10003;</span> Free &amp; open-source (MIT)</td>
+                        <td class="col-cloud"><span class="cross">&#10007;</span> $8&ndash;15/month</td>
+                    </tr>
+                    <tr>
+                        <td>Dependencies</td>
+                        <td class="col-ow"><span class="check">&#10003;</span> Native frameworks only</td>
+                        <td class="col-cloud"><span class="cross">&#10007;</span> Bundled runtimes, heavy installers</td>
+                    </tr>
+                    <tr>
+                        <td>Privacy</td>
+                        <td class="col-ow"><span class="check">&#10003;</span> On-device recognition when available</td>
+                        <td class="col-cloud"><span class="cross">&#10007;</span> Audio routed through vendor clouds</td>
+                    </tr>
+                    <tr>
+                        <td>Auto-paste</td>
+                        <td class="col-ow"><span class="check">&#10003;</span> Built in, with focus restoration</td>
+                        <td class="col-cloud">Varies</td>
+                    </tr>
+                    <tr>
+                        <td>Hotkey</td>
+                        <td class="col-ow"><span class="check">&#10003;</span> Fully configurable in-app</td>
+                        <td class="col-cloud">Often fixed or gated</td>
+                    </tr>
+                    <tr>
+                        <td>History</td>
+                        <td class="col-ow"><span class="check">&#10003;</span> Local JSON, yours to keep</td>
+                        <td class="col-cloud"><span class="cross">&#10007;</span> Synced to vendor accounts</td>
+                    </tr>
+                    <tr>
+                        <td>Data collection</td>
+                        <td class="col-ow"><span class="check">&#10003;</span> None. No accounts, no telemetry</td>
+                        <td class="col-cloud"><span class="cross">&#10007;</span> Account required</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section id="install">
+    <div class="container">
+        <span class="section-label">Installation</span>
+        <h2 class="section-title">Up and running in two minutes</h2>
+        <p class="section-desc">
+            Build from source with Swift Package Manager. Requires macOS 15+, an Apple Silicon Mac and Xcode 16+.
+        </p>
+        <div class="install-steps">
+            <div class="install-step">
+                <div class="step-number">1</div>
+                <h3>Clone the repository</h3>
+                <p>Grab the source code from GitHub.</p>
+            </div>
+            <div class="install-step">
+                <div class="step-number">2</div>
+                <h3>Build the app</h3>
+                <p><code>make app</code> compiles, bundles and ad-hoc signs <code>OpenWhisper.app</code>.</p>
+            </div>
+            <div class="install-step">
+                <div class="step-number">3</div>
+                <h3>Grant permissions</h3>
+                <p>Accept the microphone, speech and (for auto-paste) accessibility prompts. Start dictating with ⌘⇧G.</p>
+            </div>
+        </div>
+        <div class="code-block">
+            <span class="comment"># Clone the repo</span><br>
+            <span class="cmd">git clone</span> https://github.com/marcosoliveira1/openwhisper.git<br>
+            <span class="cmd">cd</span> openwhisper<br><br>
+            <span class="comment"># Build and bundle the app</span><br>
+            <span class="cmd">make</span> app<br><br>
+            <span class="comment"># Launch</span><br>
+            <span class="cmd">open</span> build/OpenWhisper.app
+        </div>
+    </div>
+</section>
+
+<section id="faq" style="background: var(--bg-secondary);">
+    <div class="container section-center">
+        <span class="section-label">FAQ</span>
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <p class="section-desc">Common questions about OpenWhisper.</p>
+        <div class="faq-list">
+            <div class="faq-item">
+                <button class="faq-question" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+                    <h3>Is OpenWhisper really free?</h3>
+                    <svg class="faq-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="faq-answer">
+                    <p>Yes. OpenWhisper is free and open-source under the MIT license. No subscriptions, no trials, no accounts.</p>
+                </div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+                    <h3>Where does my audio go?</h3>
+                    <svg class="faq-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="faq-answer">
+                    <p>OpenWhisper uses Apple's Speech framework. When on-device recognition is available for the language (Portuguese&ndash;Brazil on modern macOS), it is forced fully local via <code>requiresOnDeviceRecognition</code> &mdash; nothing leaves your Mac. When on-device is unavailable, it falls back to Apple's server-based recognition, the same path macOS dictation uses. No third-party servers and no telemetry are involved.</p>
+                </div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+                    <h3>How does auto-paste work?</h3>
+                    <svg class="faq-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="faq-answer">
+                    <p>When you finish a dictation, OpenWhisper copies the text, restores focus to the app that was active when you started, and synthesizes &#8984;V there. This requires the Accessibility permission. You can toggle auto-paste off in Settings &mdash; the clipboard copy always works as a fallback.</p>
+                </div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+                    <h3>Which languages are supported?</h3>
+                    <svg class="faq-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="faq-answer">
+                    <p>Version 0.1 targets Portuguese (Brazil), which is what the recognizer is configured for. The underlying Speech framework supports many more locales &mdash; multi-language support is a planned improvement.</p>
+                </div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+                    <h3>Why does the default hotkey conflict with Finder?</h3>
+                    <svg class="faq-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="faq-answer">
+                    <p>&#8984;&#8679;G is also Finder's "Go to Folder" shortcut. Global hotkeys take precedence, so that Finder shortcut stops working while OpenWhisper runs. If that bothers you, pick any other combination in Settings &mdash; Configura&ccedil;&otilde;es &rarr; Atalho global.</p>
+                </div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+                    <h3>Is there a downloadable binary?</h3>
+                    <svg class="faq-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="faq-answer">
+                    <p>Not yet &mdash; currently you build from source with a single <code>make app</code>. Prebuilt releases are on the roadmap.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer>
+    <div class="container">
+        <div class="footer-logo">Open<span>Whisper</span></div>
+        <div class="footer-links">
+            <a href="https://github.com/marcosoliveira1/openwhisper" rel="noopener" target="_blank">GitHub Repository</a>
+            <a href="https://github.com/marcosoliveira1/openwhisper/issues" rel="noopener" target="_blank">Report an Issue</a>
+            <a href="https://github.com/marcosoliveira1/openwhisper/blob/master/LICENSE" rel="noopener" target="_blank">MIT License</a>
+        </div>
+        <p class="footer-copy">
+            OpenWhisper is free and open-source software released under the MIT License.
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>
