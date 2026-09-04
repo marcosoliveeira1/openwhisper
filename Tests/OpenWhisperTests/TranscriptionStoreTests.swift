@@ -66,4 +66,42 @@ import Testing
         let all = await store.all()
         #expect(all.isEmpty)
     }
+
+    @Test func customCapacityRespected() async {
+        let store = TranscriptionStore(fileURL: makeURL(), capacity: 3)
+        for i in 1...5 {
+            await store.add("x\(i)")
+        }
+        let all = await store.all()
+        #expect(all.count == 3)
+        #expect(all.map(\.text) == ["x5", "x4", "x3"])
+    }
+
+    @Test func setCapacityTrimsExistingAndPersists() async {
+        let url = makeURL()
+        let store = TranscriptionStore(fileURL: url, capacity: 5)
+        for i in 1...5 {
+            await store.add("y\(i)")
+        }
+        await store.setCapacity(2)
+        var all = await store.all()
+        #expect(all.map(\.text) == ["y5", "y4"])
+
+        let reloaded = TranscriptionStore(fileURL: url)
+        all = await reloaded.all()
+        #expect(all.map(\.text) == ["y5", "y4"])
+    }
+
+    @Test func raisedCapacityKeepsAcceptingMore() async {
+        let store = TranscriptionStore(fileURL: makeURL(), capacity: 2)
+        await store.add("a")
+        await store.add("b")
+        await store.setCapacity(4)
+        await store.add("c")
+        await store.add("d")
+        await store.add("e")
+        let all = await store.all()
+        #expect(all.count == 4)
+        #expect(all.first?.text == "e")
+    }
 }
