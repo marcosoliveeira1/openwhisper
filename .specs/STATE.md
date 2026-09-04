@@ -11,5 +11,5 @@
 
 ## Handoff
 
-**In-flight:** Nenhum — design + tasks aprovados pendentes de execução.
-**Next step:** Execute Phase 1 (T1 scaffold → T2 store → T3 speech service).
+**In-flight:** Nenhum — OpenWhisper MVP completo e validado (Verifier PASS, commit c621d5f).
+**Next step:** UAT interativo com o usuário (voz real: ⌘⇧G, transcrição pt-BR, auto-copy, histórico, Cancelar). Depois: próxima feature = correção por IA via API compatível OpenAI (spec própria).
