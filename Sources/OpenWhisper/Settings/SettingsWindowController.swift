@@ -2,47 +2,147 @@ import AppKit
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var hotKeyCode: UInt32
+    @State private var hotKeyModifiers: UInt32
+    @State private var limitText: String
+    @State private var lastValidLimit: Int
+
+    var onHotKeyChanged: (UInt32, UInt32) -> Void
+    var onLimitChanged: (Int) -> Void
+    var onClearHistory: () -> Void
+
+    init(
+        hotKeyCode: UInt32,
+        hotKeyModifiers: UInt32,
+        historyLimit: Int,
+        onHotKeyChanged: @escaping (UInt32, UInt32) -> Void,
+        onLimitChanged: @escaping (Int) -> Void,
+        onClearHistory: @escaping () -> Void
+    ) {
+        _hotKeyCode = State(initialValue: hotKeyCode)
+        _hotKeyModifiers = State(initialValue: hotKeyModifiers)
+        _limitText = State(initialValue: String(historyLimit))
+        _lastValidLimit = State(initialValue: historyLimit)
+        self.onHotKeyChanged = onHotKeyChanged
+        self.onLimitChanged = onLimitChanged
+        self.onClearHistory = onClearHistory
+    }
+
     var body: some View {
         Form {
-            LabeledContent("Atalho global") {
-                Text("⌘⇧G").font(.system(.body, design: .monospaced))
+            Section("Atalho global") {
+                LabeledContent("Ativar ditado") {
+                    HotKeyRecorderField(
+                        keyCode: $hotKeyCode,
+                        modifiers: $hotKeyModifiers,
+                        onChange: {
+                            onHotKeyChanged(hotKeyCode, hotKeyModifiers)
+                        }
+                    )
+                    .frame(width: 150)
+                }
+                LabeledContent {
+                    EmptyView()
+                } label: {
+                    Text("Clique no atalho e pressione a nova combinação. Esc cancela.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            LabeledContent("Idioma") {
-                Text("Português (Brasil)")
+            Section("Histórico") {
+                LabeledContent("Manter transcrições") {
+                    HStack(spacing: 8) {
+                        TextField("Limite", text: $limitText)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 64)
+                            .onSubmit(applyLimit)
+                        Stepper("", onIncrement: { bumpLimit(5) }, onDecrement: { bumpLimit(-5) })
+                            .labelsHidden()
+                    }
+                }
+                LabeledContent {
+                    Button("Limpar histórico", role: .destructive) {
+                        onClearHistory()
+                    }
+                } label: {
+                    Text("Dados")
+                }
             }
-            LabeledContent("Histórico") {
-                Text("Últimas 50 transcrições")
-            }
-            LabeledContent("Versão") {
-                Text(version)
+            Section("Sobre") {
+                LabeledContent("Versão") {
+                    Text(versionString).foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 340)
+        .frame(width: 440)
     }
 
-    private var version: String {
+    private var versionString: String {
         let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        return short.map { "OpenWhisper \($0)" } ?? "OpenWhisper"
+        return "OpenWhisper \(short ?? "0.1")"
+    }
+
+    private func applyLimit() {
+        guard let value = Int(limitText.trimmingCharacters(in: .whitespaces)) else {
+            limitText = String(lastValidLimit)
+            return
+        }
+        let clamped = min(500, max(1, value))
+        limitText = String(clamped)
+        lastValidLimit = clamped
+        onLimitChanged(clamped)
+    }
+
+    private func bumpLimit(_ delta: Int) {
+        let clamped = min(500, max(1, lastValidLimit + delta))
+        limitText = String(clamped)
+        lastValidLimit = clamped
+        onLimitChanged(clamped)
     }
 }
 
 @MainActor
 final class SettingsWindowController {
-    static let shared = SettingsWindowController()
-
+    private let model: AppModel
+    private let hotKey: HotKeyController
+    private let store: TranscriptionStore
     private let window: NSWindow
 
-    private init() {
+    init(model: AppModel, hotKey: HotKeyController, store: TranscriptionStore) {
+        self.model = model
+        self.hotKey = hotKey
+        self.store = store
+
+        let view = SettingsView(
+            hotKeyCode: AppSettings.hotKeyCode,
+            hotKeyModifiers: AppSettings.hotKeyModifiers,
+            historyLimit: AppSettings.historyLimit,
+            onHotKeyChanged: { code, modifiers in
+                hotKey.update(keyCode: code, modifiers: modifiers)
+                AppSettings.hotKeyCode = code
+                AppSettings.hotKeyModifiers = modifiers
+            },
+            onLimitChanged: { limit in
+                AppSettings.historyLimit = limit
+                Task {
+                    await store.setCapacity(limit)
+                }
+            },
+            onClearHistory: {
+                model.clearHistory()
+            }
+        )
+
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 320),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Configurações"
-        window.contentView = NSHostingView(rootView: SettingsView())
+        window.contentView = NSHostingView(rootView: view)
         window.center()
         window.isReleasedWhenClosed = false
     }

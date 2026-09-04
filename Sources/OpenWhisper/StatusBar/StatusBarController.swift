@@ -8,10 +8,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private var cachedEntries: [Transcription] = []
     private var cancellables: Set<AnyCancellable> = []
+    private let openSettings: () -> Void
 
-    init(model: AppModel, store: TranscriptionStore) {
+    init(model: AppModel, store: TranscriptionStore, openSettings: @escaping () -> Void) {
         self.model = model
         self.store = store
+        self.openSettings = openSettings
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -58,11 +60,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
                 menuItem.representedObject = text
                 menuItem.toolTip = text
             case .empty:
-                menuItem.isEnabled = false
+                break
             case .clear:
                 menuItem.target = self
                 menuItem.action = #selector(clearClicked(_:))
-                menuItem.isEnabled = !items.contains { if case .transcription = $0.kind { return true }; return false }
             case .settings:
                 menuItem.target = self
                 menuItem.action = #selector(settingsClicked(_:))
@@ -74,6 +75,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             case .quit:
                 menuItem.action = #selector(NSApplication.terminate(_:))
             }
+            menuItem.isEnabled = item.isEnabled
             menu.addItem(menuItem)
         }
     }
@@ -88,7 +90,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func settingsClicked(_ sender: NSMenuItem) {
-        SettingsWindowController.shared.show()
+        openSettings()
     }
 
     @objc private func aboutClicked(_ sender: NSMenuItem) {

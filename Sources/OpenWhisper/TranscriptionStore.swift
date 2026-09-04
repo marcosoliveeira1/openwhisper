@@ -8,23 +8,37 @@ struct Transcription: Codable, Identifiable, Equatable, Sendable {
 }
 
 actor TranscriptionStore {
-    private static let capacity = 50
+    static let defaultCapacity = 50
 
     private let fileURL: URL
     private let logger = Logger(subsystem: "br.marcos.openwhisper", category: "store")
+    private(set) var capacity: Int
     private var entries: [Transcription] = []
 
-    init(fileURL: URL) {
+    init(fileURL: URL, capacity: Int = TranscriptionStore.defaultCapacity) {
         self.fileURL = fileURL
+        self.capacity = max(1, capacity)
         entries = Self.load(from: fileURL)
+        if entries.count > self.capacity {
+            entries.removeLast(entries.count - self.capacity)
+        }
+    }
+
+    func setCapacity(_ newCapacity: Int) {
+        capacity = max(1, newCapacity)
+        trimToCapacity()
+        persist()
+    }
+
+    private func trimToCapacity() {
+        guard entries.count > capacity else { return }
+        entries.removeLast(entries.count - capacity)
     }
 
     func add(_ text: String) {
         let entry = Transcription(id: UUID(), text: text, createdAt: Date())
         entries.insert(entry, at: 0)
-        if entries.count > Self.capacity {
-            entries.removeLast(entries.count - Self.capacity)
-        }
+        trimToCapacity()
         persist()
     }
 

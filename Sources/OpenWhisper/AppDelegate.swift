@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let storeURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("OpenWhisper", isDirectory: true)
             .appendingPathComponent("history.json")
-        let store = TranscriptionStore(fileURL: storeURL)
+        let store = TranscriptionStore(fileURL: storeURL, capacity: AppSettings.historyLimit)
         let model = AppModel(
             dictation: AppleSpeechService(),
             clipboard: NSPasteboardClipboard(),
@@ -19,10 +19,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.model = model
         panelController = DictationPanelController(model: model)
-        statusBar = StatusBarController(model: model, store: store)
-        hotKey = HotKeyController(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey | shiftKey)) {
+        let hotKey = HotKeyController(
+            keyCode: AppSettings.hotKeyCode,
+            modifiers: AppSettings.hotKeyModifiers
+        ) {
             model.toggle()
         }
-        hotKey?.start()
+        self.hotKey = hotKey
+        hotKey.start()
+        let settingsWindow = SettingsWindowController(model: model, hotKey: hotKey, store: store)
+        statusBar = StatusBarController(model: model, store: store) {
+            settingsWindow.show()
+        }
     }
 }
