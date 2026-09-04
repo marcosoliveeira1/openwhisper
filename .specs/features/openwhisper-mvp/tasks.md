@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/openwhisper-mvp/design.md`
-**Status**: Draft
+**Status**: All tasks complete — pending Verifier
 
 ---
 
@@ -71,7 +71,7 @@ T4..T7 complete, then:
 
 ## Task Breakdown
 
-### T1: Scaffold do projeto e app tray mínimo
+### ✅ T1: Scaffold do projeto e app tray mínimo
 
 **What**: Package.swift (executable `OpenWhisper` + test target), Info.plist (`LSUIElement`, usage descriptions mic/speech, bundle ID `br.marcos.openwhisper`), Makefile (`app` monta .app + ad-hoc codesign; `run`; `clean`), `main.swift` + `AppDelegate` mínimo com `NSStatusItem` placeholder e app sem ícone no Dock.
 **Where**: `Package.swift`, `Info.plist`, `Makefile`, `Sources/OpenWhisper/main.swift`, `Sources/OpenWhisper/AppDelegate.swift`
@@ -96,7 +96,7 @@ T4..T7 complete, then:
 
 ---
 
-### T2: Modelo Transcription + TranscriptionStore
+### ✅ T2: Modelo Transcription + TranscriptionStore
 
 **What**: Struct `Transcription` (Codable) e actor `TranscriptionStore` com `add` (cap 50, descarta mais antiga), `all` (mais recente primeiro), `clear`, persistência JSON em URL injetável (default: Application Support).
 **Where**: `Sources/OpenWhisper/TranscriptionStore.swift`
@@ -122,7 +122,7 @@ T4..T7 complete, then:
 
 ---
 
-### T3: DictationService protocol + AppleSpeechService
+### ✅ T3: DictationService protocol + AppleSpeechService
 
 **What**: Protocolo `DictationService` (`start/onPartial/finish/cancel`) e implementação `AppleSpeechService`: `SFSpeechRecognizer(pt-BR)`, feature-detect on-device, `AVAudioEngine` input tap → `SFSpeechAudioBufferRecognitionRequest`, autorização mic+speech em runtime, mapeamento de erros do design, `finish()` devolve partials em falha de task.
 **Where**: `Sources/OpenWhisper/Speech/DictationService.swift`, `Sources/OpenWhisper/Speech/AppleSpeechService.swift`
@@ -147,7 +147,7 @@ T4..T7 complete, then:
 
 ---
 
-### T4: AppModel (máquina de estados) + Clipboard
+### ✅ T4: AppModel (máquina de estados) + Clipboard
 
 **What**: `AppModel` ObservableObject com `DictationState`, `toggle/finish/cancel/copyToClipboard`, regras: toggle com painel aberto = finish; transcribing ignora toggle; transcript vazio = zero side effects + estado de mensagem; finish copia→persiste→fecha; cancel não toca clipboard nem store. Protocolo `Clipboard` + `NSPasteboardClipboard`.
 **Where**: `Sources/OpenWhisper/AppModel.swift`, `Sources/OpenWhisper/Clipboard.swift`
@@ -171,7 +171,7 @@ T4..T7 complete, then:
 
 ---
 
-### T5: Painel flutuante (NSPanel + SwiftUI)
+### ✅ T5: Painel flutuante (NSPanel + SwiftUI)
 
 **What**: `DictationPanelController` (NSPanel `.nonactivatingPanel`/`.borderless`, level `.floating`, `canJoinAllSpaces`) + `DictationView`: indicador de gravação + timer, live text (partials), botões Finalizar/Cancelar, Esc = cancelar, estado `.failed` com mensagem inline e botão "Abrir Ajustes".
 **Where**: `Sources/OpenWhisper/Panel/DictationPanelController.swift`, `Sources/OpenWhisper/Panel/DictationView.swift`
@@ -197,7 +197,7 @@ T4..T7 complete, then:
 
 ---
 
-### T6: StatusBarController + HistoryMenuBuilder
+### ✅ T6: StatusBarController + HistoryMenuBuilder
 
 **What**: `HistoryMenuBuilder` (lógica pura: truncar label a 60 chars, tooltip completo, mais recente primeiro, vazio → "Sem transcrições" desabilitado, itens fixos Limpar histórico/Sair) e `StatusBarController` que renderiza o menu, copia no click, reconstrói quando o store muda.
 **Where**: `Sources/OpenWhisper/StatusBar/HistoryMenuBuilder.swift`, `Sources/OpenWhisper/StatusBar/StatusBarController.swift`
@@ -222,7 +222,7 @@ T4..T7 complete, then:
 
 ---
 
-### T7: HotKeyController (⌘⇧G global)
+### ✅ T7: HotKeyController (⌘⇧G global)
 
 **What**: Registro Carbon `RegisterEventHotKey` para ⌘⇧G com handler injetável; `start/stop`; keycode/modifiers como constantes nomeadas.
 **Where**: `Sources/OpenWhisper/HotKeyController.swift`
@@ -246,7 +246,7 @@ T4..T7 complete, then:
 
 ---
 
-### T8: Integração completa (AppDelegate wiring + fluxo end-to-end)
+### ✅ T8: Integração completa (AppDelegate wiring + fluxo end-to-end)
 
 **What**: Composição final no AppDelegate: HotKey→AppModel.toggle; painel reflete estado; StatusBarController atualiza ao persistir; request de permissões no primeiro ditado; fluxo completo ⌘⇧G→fala→Finalizar→⌘V; Cancelar/Esc; histórico entre restarts.
 **Where**: `Sources/OpenWhisper/AppDelegate.swift` (modify)
@@ -270,7 +270,7 @@ T4..T7 complete, then:
 
 ---
 
-### T9: Edge cases e polimento final
+### ✅ T9: Edge cases e polimento final
 
 **What**: Edge cases da spec: transcript vazio ("Nenhuma fala detectada", sem copiar), falha de reconhecimento (partials entregues / erro inline), desconexão de áudio/sleep (finish gracioso), toggle durante transcribing ignorado, menu vazio desabilitado. Ajustes finais de layout/leveza.
 **Where**: `Sources/OpenWhisper/AppModel.swift`, `Sources/OpenWhisper/Speech/AppleSpeechService.swift` (modify)
