@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
 
@@ -26,5 +27,20 @@ enum AppSettings {
     static var autoPasteEnabled: Bool {
         get { defaults.object(forKey: "autoPasteEnabled") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "autoPasteEnabled") }
+    }
+
+    static var appearance: String {
+        get { defaults.string(forKey: "appearance") ?? "light" }
+        set { defaults.set(newValue, forKey: "appearance") }
+    }
+}
+
+enum AppearanceMode {
+    static func nsAppearance(_ raw: String) -> NSAppearance? {
+        switch raw {
+        case "light": NSAppearance(named: .aqua)
+        case "dark": NSAppearance(named: .darkAqua)
+        default: nil
+        }
     }
 }

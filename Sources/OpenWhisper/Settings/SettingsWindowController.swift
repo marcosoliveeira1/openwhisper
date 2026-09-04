@@ -8,21 +8,25 @@ struct SettingsView: View {
     @State private var lastValidLimit: Int
     @State private var autoPasteEnabled: Bool
     @State private var accessibilityTrusted: Bool
+    @State private var appearance: String
 
     var onHotKeyChanged: (UInt32, UInt32) -> Void
     var onLimitChanged: (Int) -> Void
     var onClearHistory: () -> Void
     var onAutoPasteChanged: (Bool) -> Void
+    var onAppearanceChanged: (String) -> Void
 
     init(
         hotKeyCode: UInt32,
         hotKeyModifiers: UInt32,
         historyLimit: Int,
         autoPasteEnabled: Bool,
+        appearance: String,
         onHotKeyChanged: @escaping (UInt32, UInt32) -> Void,
         onLimitChanged: @escaping (Int) -> Void,
         onClearHistory: @escaping () -> Void,
-        onAutoPasteChanged: @escaping (Bool) -> Void
+        onAutoPasteChanged: @escaping (Bool) -> Void,
+        onAppearanceChanged: @escaping (String) -> Void
     ) {
         _hotKeyCode = State(initialValue: hotKeyCode)
         _hotKeyModifiers = State(initialValue: hotKeyModifiers)
@@ -30,10 +34,12 @@ struct SettingsView: View {
         _lastValidLimit = State(initialValue: historyLimit)
         _autoPasteEnabled = State(initialValue: autoPasteEnabled)
         _accessibilityTrusted = State(initialValue: CGEventAutoPasteService.isTrusted())
+        _appearance = State(initialValue: appearance)
         self.onHotKeyChanged = onHotKeyChanged
         self.onLimitChanged = onLimitChanged
         self.onClearHistory = onClearHistory
         self.onAutoPasteChanged = onAutoPasteChanged
+        self.onAppearanceChanged = onAppearanceChanged
     }
 
     var body: some View {
@@ -55,6 +61,21 @@ struct SettingsView: View {
                     Text("Clique no atalho e pressione a nova combinação. Esc cancela.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+            Section("Aparência") {
+                LabeledContent("Tema") {
+                    Picker("", selection: $appearance) {
+                        Text("Sistema").tag("system")
+                        Text("Claro").tag("light")
+                        Text("Escuro").tag("dark")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 240)
+                    .onChange(of: appearance) { _, newValue in
+                        onAppearanceChanged(newValue)
+                    }
                 }
             }
             Section("Colagem") {
@@ -156,6 +177,7 @@ final class SettingsWindowController {
             hotKeyModifiers: AppSettings.hotKeyModifiers,
             historyLimit: AppSettings.historyLimit,
             autoPasteEnabled: AppSettings.autoPasteEnabled,
+            appearance: AppSettings.appearance,
             onHotKeyChanged: { code, modifiers in
                 hotKey.update(keyCode: code, modifiers: modifiers)
                 AppSettings.hotKeyCode = code
@@ -172,6 +194,10 @@ final class SettingsWindowController {
             },
             onAutoPasteChanged: { enabled in
                 AppSettings.autoPasteEnabled = enabled
+            },
+            onAppearanceChanged: { mode in
+                AppSettings.appearance = mode
+                NSApp.appearance = AppearanceMode.nsAppearance(mode)
             }
         )
 

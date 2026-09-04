@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: HotKeyController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.appearance = AppearanceMode.nsAppearance(AppSettings.appearance)
         let storeURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("OpenWhisper", isDirectory: true)
             .appendingPathComponent("history.json")
