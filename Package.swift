@@ -11,6 +11,11 @@ let package = Package(
         .executableTarget(
             name: "OpenWhisper",
             path: "Sources/OpenWhisper"
+        ),
+        .testTarget(
+            name: "OpenWhisperTests",
+            dependencies: ["OpenWhisper"],
+            path: "Tests/OpenWhisperTests"
         )
     ]
 )
