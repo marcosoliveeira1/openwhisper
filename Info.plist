@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>OpenWhisper</string>
+	<key>CFBundleDisplayName</key>
+	<string>OpenWhisper</string>
+	<key>CFBundleIdentifier</key>
+	<string>br.marcos.openwhisper</string>
+	<key>CFBundleExecutable</key>
+	<string>OpenWhisper</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O OpenWhisper precisa do microfone para transcrever sua fala em texto.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>O OpenWhisper usa o reconhecimento de fala do macOS para transcrever o áudio do microfone.</string>
+</dict>
+</plist>
