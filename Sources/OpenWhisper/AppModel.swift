@@ -12,6 +12,7 @@ enum DictationState: Equatable {
 final class AppModel: ObservableObject {
     @Published private(set) var state: DictationState = .idle
     @Published private(set) var liveTranscript = ""
+    @Published private(set) var historyVersion = 0
 
     private let dictation: any DictationService
     private let clipboard: any Clipboard
@@ -61,6 +62,7 @@ final class AppModel: ObservableObject {
     func clearHistory() {
         Task {
             await store.clear()
+            historyVersion += 1
         }
     }
 
@@ -97,6 +99,7 @@ final class AppModel: ObservableObject {
         }
         clipboard.copy(trimmed)
         await store.add(trimmed)
+        historyVersion += 1
         state = .idle
     }
 }

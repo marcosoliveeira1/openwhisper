@@ -185,6 +185,24 @@ final class MockClipboard: Clipboard {
         }
     }
 
+    @Test func historyChangesPublishVersionBumps() async {
+        let speech = MockDictationService()
+        speech.finishResult = "texto novo"
+        let store = makeStore()
+        let model = AppModel(dictation: speech, clipboard: MockClipboard(), store: store)
+
+        await model.toggle()
+        await waitUntil(speech.startCount == 1)
+        await model.finish()
+        await waitUntil(model.state == .idle)
+        #expect(model.historyVersion == 1)
+
+        model.clearHistory()
+        await waitUntil(model.historyVersion == 2)
+        let history = await store.all()
+        #expect(history.isEmpty)
+    }
+
     @Test func copyToClipboardUsesClipboardService() async {
         let clipboard = MockClipboard()
         let model = AppModel(dictation: MockDictationService(), clipboard: clipboard, store: makeStore())

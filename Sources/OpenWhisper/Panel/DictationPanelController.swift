@@ -17,7 +17,7 @@ final class DictationPanelController {
         self.model = model
         panel = DictationPanel(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 220),
-            styleMask: [.nonactivatingPanel, .borderless],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -48,7 +48,8 @@ final class DictationPanelController {
     private func present() {
         if !panel.isVisible {
             positionAtCenter()
-            panel.orderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
         }
         installEscMonitor()
     }

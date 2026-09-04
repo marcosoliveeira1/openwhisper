@@ -1,10 +1,13 @@
 import AppKit
+import Combine
 
 @MainActor
 final class StatusBarController: NSObject, NSMenuDelegate {
     private let model: AppModel
     private let store: TranscriptionStore
     private let statusItem: NSStatusItem
+    private var cachedEntries: [Transcription] = []
+    private var cancellables: Set<AnyCancellable> = []
 
     init(model: AppModel, store: TranscriptionStore) {
         self.model = model
@@ -17,15 +20,28 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
         let menu = NSMenu()
         menu.delegate = self
+        menu.autoenablesItems = false
         statusItem.menu = menu
+
+        model.$historyVersion
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshCache()
+            }
+            .store(in: &cancellables)
+
+        refreshCache()
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        let items = HistoryMenuBuilder.build(entries: cachedEntries)
+        populate(menu: menu, with: items)
+    }
+
+    private func refreshCache() {
         Task {
-            let entries = await store.all()
-            let items = HistoryMenuBuilder.build(entries: entries)
-            populate(menu: menu, with: items)
+            cachedEntries = await store.all()
         }
     }
 
