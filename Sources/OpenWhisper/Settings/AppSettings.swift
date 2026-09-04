@@ -22,4 +22,9 @@ enum AppSettings {
         get { UInt32(defaults.object(forKey: "hotKeyModifiers") as? Int ?? Int(defaultHotKeyModifiers)) }
         set { defaults.set(Int(newValue), forKey: "hotKeyModifiers") }
     }
+
+    static var autoPasteEnabled: Bool {
+        get { defaults.object(forKey: "autoPasteEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "autoPasteEnabled") }
+    }
 }

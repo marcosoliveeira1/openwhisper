@@ -54,6 +54,18 @@ final class MockClipboard: Clipboard {
     }
 }
 
+final class MockAutoPasteService: AutoPasteService, @unchecked Sendable {
+    private(set) var pasteCount = 0
+    private(set) var pastedPIDs: [pid_t] = []
+
+    func paste(into pid: pid_t?) async {
+        pasteCount += 1
+        if let pid {
+            pastedPIDs.append(pid)
+        }
+    }
+}
+
 @Suite @MainActor struct AppModelTests {
     private func makeStore() -> TranscriptionStore {
         TranscriptionStore(
@@ -201,6 +213,67 @@ final class MockClipboard: Clipboard {
         await waitUntil(model.historyVersion == 2)
         let history = await store.all()
         #expect(history.isEmpty)
+    }
+
+    @Test func autoPasteEnabledPastesAfterFinish() async {
+        let speech = MockDictationService()
+        speech.finishResult = "cola isso"
+        let paste = MockAutoPasteService()
+        let model = AppModel(
+            dictation: speech,
+            clipboard: MockClipboard(),
+            store: makeStore(),
+            autoPaste: paste,
+            isAutoPasteEnabled: { true }
+        )
+
+        await model.toggle()
+        await waitUntil(speech.startCount == 1)
+        await model.finish()
+        await waitUntil(model.state == .idle)
+        await waitUntil(paste.pasteCount == 1)
+
+        #expect(paste.pasteCount == 1)
+        #expect(model.state == .idle)
+    }
+
+    @Test func autoPasteDisabledSkipsPaste() async {
+        let speech = MockDictationService()
+        speech.finishResult = "não cola"
+        let paste = MockAutoPasteService()
+        let model = AppModel(
+            dictation: speech,
+            clipboard: MockClipboard(),
+            store: makeStore(),
+            autoPaste: paste,
+            isAutoPasteEnabled: { false }
+        )
+
+        await model.toggle()
+        await waitUntil(speech.startCount == 1)
+        await model.finish()
+        await waitUntil(model.state == .idle)
+
+        #expect(paste.pasteCount == 0)
+    }
+
+    @Test func cancelNeverPastes() async {
+        let speech = MockDictationService()
+        let paste = MockAutoPasteService()
+        let model = AppModel(
+            dictation: speech,
+            clipboard: MockClipboard(),
+            store: makeStore(),
+            autoPaste: paste,
+            isAutoPasteEnabled: { true }
+        )
+
+        await model.toggle()
+        await waitUntil(speech.startCount == 1)
+        await model.cancel()
+        await waitUntil(speech.cancelCount == 1)
+
+        #expect(paste.pasteCount == 0)
     }
 
     @Test func copyToClipboardUsesClipboardService() async {

@@ -15,7 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = AppModel(
             dictation: AppleSpeechService(),
             clipboard: NSPasteboardClipboard(),
-            store: store
+            store: store,
+            autoPaste: CGEventAutoPasteService(),
+            isAutoPasteEnabled: { AppSettings.autoPasteEnabled }
         )
         self.model = model
         panelController = DictationPanelController(model: model)

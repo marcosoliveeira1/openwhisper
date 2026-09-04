@@ -6,26 +6,34 @@ struct SettingsView: View {
     @State private var hotKeyModifiers: UInt32
     @State private var limitText: String
     @State private var lastValidLimit: Int
+    @State private var autoPasteEnabled: Bool
+    @State private var accessibilityTrusted: Bool
 
     var onHotKeyChanged: (UInt32, UInt32) -> Void
     var onLimitChanged: (Int) -> Void
     var onClearHistory: () -> Void
+    var onAutoPasteChanged: (Bool) -> Void
 
     init(
         hotKeyCode: UInt32,
         hotKeyModifiers: UInt32,
         historyLimit: Int,
+        autoPasteEnabled: Bool,
         onHotKeyChanged: @escaping (UInt32, UInt32) -> Void,
         onLimitChanged: @escaping (Int) -> Void,
-        onClearHistory: @escaping () -> Void
+        onClearHistory: @escaping () -> Void,
+        onAutoPasteChanged: @escaping (Bool) -> Void
     ) {
         _hotKeyCode = State(initialValue: hotKeyCode)
         _hotKeyModifiers = State(initialValue: hotKeyModifiers)
         _limitText = State(initialValue: String(historyLimit))
         _lastValidLimit = State(initialValue: historyLimit)
+        _autoPasteEnabled = State(initialValue: autoPasteEnabled)
+        _accessibilityTrusted = State(initialValue: CGEventAutoPasteService.isTrusted())
         self.onHotKeyChanged = onHotKeyChanged
         self.onLimitChanged = onLimitChanged
         self.onClearHistory = onClearHistory
+        self.onAutoPasteChanged = onAutoPasteChanged
     }
 
     var body: some View {
@@ -47,6 +55,34 @@ struct SettingsView: View {
                     Text("Clique no atalho e pressione a nova combinação. Esc cancela.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+            Section("Colagem") {
+                LabeledContent("Após ditar") {
+                    Toggle("Colar automaticamente", isOn: $autoPasteEnabled)
+                        .onChange(of: autoPasteEnabled) { _, newValue in
+                            onAutoPasteChanged(newValue)
+                        }
+                }
+                LabeledContent {
+                    EmptyView()
+                } label: {
+                    Text("Cola o texto no app que estava em foco ao iniciar o ditado. Requer permissão de Acessibilidade.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !accessibilityTrusted {
+                    LabeledContent {
+                        Button("Abrir Ajustes de Acessibilidade") {
+                            CGEventAutoPasteService.promptPermission()
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    } label: {
+                        Text("Permissão pendente")
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
             Section("Histórico") {
@@ -119,6 +155,7 @@ final class SettingsWindowController {
             hotKeyCode: AppSettings.hotKeyCode,
             hotKeyModifiers: AppSettings.hotKeyModifiers,
             historyLimit: AppSettings.historyLimit,
+            autoPasteEnabled: AppSettings.autoPasteEnabled,
             onHotKeyChanged: { code, modifiers in
                 hotKey.update(keyCode: code, modifiers: modifiers)
                 AppSettings.hotKeyCode = code
@@ -132,6 +169,9 @@ final class SettingsWindowController {
             },
             onClearHistory: {
                 model.clearHistory()
+            },
+            onAutoPasteChanged: { enabled in
+                AppSettings.autoPasteEnabled = enabled
             }
         )
 

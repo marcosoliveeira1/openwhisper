@@ -17,11 +17,22 @@ final class AppModel: ObservableObject {
     private let dictation: any DictationService
     private let clipboard: any Clipboard
     private let store: TranscriptionStore
+    private let autoPaste: (any AutoPasteService)?
+    private let isAutoPasteEnabled: () -> Bool
+    private var targetPID: pid_t?
 
-    init(dictation: any DictationService, clipboard: any Clipboard, store: TranscriptionStore) {
+    init(
+        dictation: any DictationService,
+        clipboard: any Clipboard,
+        store: TranscriptionStore,
+        autoPaste: (any AutoPasteService)? = nil,
+        isAutoPasteEnabled: @escaping () -> Bool = { false }
+    ) {
         self.dictation = dictation
         self.clipboard = clipboard
         self.store = store
+        self.autoPaste = autoPaste
+        self.isAutoPasteEnabled = isAutoPasteEnabled
         Task {
             await dictation.setPartialHandler { [weak self] text in
                 Task { @MainActor in
@@ -51,6 +62,8 @@ final class AppModel: ObservableObject {
         Task {
             await dictation.cancel()
         }
+        FocusRestorer.activate(pid: targetPID)
+        targetPID = nil
         state = .idle
         liveTranscript = ""
     }
@@ -68,6 +81,7 @@ final class AppModel: ObservableObject {
 
     private func startDictation() {
         liveTranscript = ""
+        targetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         state = .recording(startedAt: Date())
         Task { [weak self] in
             guard let self else { return }
@@ -101,5 +115,12 @@ final class AppModel: ObservableObject {
         await store.add(trimmed)
         historyVersion += 1
         state = .idle
+        let pid = targetPID
+        targetPID = nil
+        if isAutoPasteEnabled(), let autoPaste {
+            Task {
+                await autoPaste.paste(into: pid)
+            }
+        }
     }
 }
