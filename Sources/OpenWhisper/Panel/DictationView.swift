@@ -37,7 +37,7 @@ struct DictationView: View {
                     }
                 }
             }
-            Waveform(accent: accentColor)
+            Waveform(accent: accentColor, samples: model.levelSamples)
             transcriptBox
             controls(showsFinish: true)
         }
@@ -48,7 +48,7 @@ struct DictationView: View {
             header(title: "Transcrevendo…") {
                 ProgressView().controlSize(.small)
             }
-            Waveform(accent: accentColor, muted: true)
+            Waveform(accent: accentColor, samples: nil, muted: true)
             transcriptBox
             controls(showsFinish: false)
         }
@@ -118,6 +118,7 @@ struct DictationView: View {
                             .stroke(borderColor, lineWidth: 1)
                     )
             }
+            .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
             if showsFinish {
                 Button(action: model.finish) {
@@ -128,6 +129,7 @@ struct DictationView: View {
                         .padding(.vertical, 9)
                         .background(accentColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
+                .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -181,28 +183,29 @@ struct DictationView: View {
 
 struct Waveform: View {
     let accent: Color
+    var samples: [Double]? = nil
     var muted = false
 
-    @State private var animating = false
     private let bars = 12
-    private let pattern: [CGFloat] = [22, 36, 50, 30, 52, 38, 26, 46, 32, 50, 24, 42]
+    private let staticPattern: [CGFloat] = [22, 36, 50, 30, 52, 38, 26, 46, 32, 50, 24, 42]
 
     var body: some View {
         HStack(spacing: 5) {
             ForEach(0..<bars, id: \.self) { i in
                 Capsule()
                     .fill(accent.opacity(muted ? 0.4 : 1))
-                    .frame(width: 5, height: animating ? pattern[i % pattern.count] : 8)
-                    .animation(
-                        .easeInOut(duration: 0.55 + Double(i % 4) * 0.09)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(i) * 0.07),
-                        value: animating
-                    )
+                    .frame(width: 5, height: height(for: i))
+                    .animation(.easeOut(duration: 0.12), value: samples)
             }
         }
         .frame(height: 54)
-        .onAppear { animating = true }
+    }
+
+    private func height(for i: Int) -> CGFloat {
+        if let samples, samples.count == bars {
+            return max(8, CGFloat(samples[i]) * 52)
+        }
+        return staticPattern[i % staticPattern.count]
     }
 }
 

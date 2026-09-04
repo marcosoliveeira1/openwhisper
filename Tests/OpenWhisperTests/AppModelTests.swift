@@ -3,7 +3,7 @@ import Testing
 
 @testable import OpenWhisper
 
-final class MockDictationService: DictationService, @unchecked Sendable {
+final class MockDictationService: DictationService, AudioLevelProviding, @unchecked Sendable {
     var startError: FailureReason?
     var finishResult: String?
     var holdFinish = false
@@ -44,6 +44,16 @@ final class MockDictationService: DictationService, @unchecked Sendable {
 
     func cancel() async {
         cancelCount += 1
+    }
+
+    var levelHandler: (@Sendable (Double) -> Void)?
+
+    func setLevelHandler(_ handler: @escaping @Sendable (Double) -> Void) async {
+        levelHandler = handler
+    }
+
+    func emitLevel(_ level: Double) {
+        levelHandler?(level)
     }
 }
 
@@ -274,6 +284,19 @@ final class MockAutoPasteService: AutoPasteService, @unchecked Sendable {
         await waitUntil(speech.cancelCount == 1)
 
         #expect(paste.pasteCount == 0)
+    }
+
+    @Test func audioLevelsFlowToPublishedSamples() async {
+        let speech = MockDictationService()
+        let model = AppModel(dictation: speech, clipboard: MockClipboard(), store: makeStore())
+
+        await model.toggle()
+        await waitUntil(speech.levelHandler != nil)
+        speech.emitLevel(0.9)
+        await waitUntil(model.levelSamples.last == 0.9)
+
+        #expect(model.levelSamples.count == 12)
+        #expect(model.levelSamples.last == 0.9)
     }
 
     @Test func copyToClipboardUsesClipboardService() async {

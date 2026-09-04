@@ -13,6 +13,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var state: DictationState = .idle
     @Published private(set) var liveTranscript = ""
     @Published private(set) var historyVersion = 0
+    @Published private(set) var levelSamples: [Double] = Array(repeating: 0.08, count: 12)
 
     private let dictation: any DictationService
     private let clipboard: any Clipboard
@@ -39,7 +40,19 @@ final class AppModel: ObservableObject {
                     self?.liveTranscript = text
                 }
             }
+            if let levelProvider = dictation as? AudioLevelProviding {
+                await levelProvider.setLevelHandler { [weak self] level in
+                    Task { @MainActor in
+                        self?.pushLevel(level)
+                    }
+                }
+            }
         }
+    }
+
+    private func pushLevel(_ level: Double) {
+        levelSamples.removeFirst()
+        levelSamples.append(max(0.06, min(1, level)))
     }
 
     func toggle() {
@@ -81,6 +94,7 @@ final class AppModel: ObservableObject {
 
     private func startDictation() {
         liveTranscript = ""
+        levelSamples = Array(repeating: 0.08, count: 12)
         targetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         state = .recording(startedAt: Date())
         Task { [weak self] in

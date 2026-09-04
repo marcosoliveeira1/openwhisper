@@ -14,3 +14,7 @@ protocol DictationService: AnyObject, Sendable {
     func finish() async -> String?
     func cancel() async
 }
+
+protocol AudioLevelProviding: AnyObject {
+    func setLevelHandler(_ handler: @escaping @Sendable (Double) -> Void) async
+}

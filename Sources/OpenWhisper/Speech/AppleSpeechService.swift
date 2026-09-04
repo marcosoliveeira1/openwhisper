@@ -2,8 +2,10 @@ import AVFoundation
 import Foundation
 import Speech
 
-actor AppleSpeechService: DictationService {
+actor AppleSpeechService: DictationService, AudioLevelProviding {
     private var onPartial: (@Sendable (String) -> Void)?
+    private var onLevel: (@Sendable (Double) -> Void)?
+    private var smoothedLevel: Double = 0
 
     private let locale = Locale(identifier: "pt-BR")
     private let audioEngine = AVAudioEngine()
@@ -16,6 +18,16 @@ actor AppleSpeechService: DictationService {
 
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) {
         onPartial = handler
+    }
+
+    func setLevelHandler(_ handler: @escaping @Sendable (Double) -> Void) {
+        onLevel = handler
+        smoothedLevel = 0
+    }
+
+    private func emitLevel(_ level: Double) {
+        smoothedLevel = max(level, smoothedLevel * 0.82)
+        onLevel?(smoothedLevel)
     }
 
     func start() async throws {
@@ -40,8 +52,23 @@ actor AppleSpeechService: DictationService {
         guard format.sampleRate > 0 else {
             throw FailureReason.engineError("nenhum dispositivo de entrada de áudio")
         }
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             request.append(buffer)
+            guard let self, let channel = buffer.floatChannelData else { return }
+            let frames = Int(buffer.frameLength)
+            guard frames > 0 else { return }
+            let data = channel[0]
+            var sum: Float = 0
+            for i in 0..<frames {
+                let sample = data[i]
+                sum += sample * sample
+            }
+            let rms = sqrt(sum / Float(frames))
+            let db = 20 * log10(max(rms, 1e-6))
+            let level = Double(max(0, min(1, (db + 55) / 40)))
+            Task {
+                await self.emitLevel(level)
+            }
         }
         audioEngine.prepare()
         do {
@@ -136,6 +163,7 @@ actor AppleSpeechService: DictationService {
         request = nil
         task = nil
         accumulated = ""
+        smoothedLevel = 0
     }
 
     private func stopCapture() {
