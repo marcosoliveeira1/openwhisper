@@ -1,18 +1,28 @@
 import AppKit
+import Carbon.HIToolbox
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem?
+    private var model: AppModel?
+    private var panelController: DictationPanelController?
+    private var statusBar: StatusBarController?
+    private var hotKey: HotKeyController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = item.button {
-            button.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "OpenWhisper")
+        let storeURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("OpenWhisper", isDirectory: true)
+            .appendingPathComponent("history.json")
+        let store = TranscriptionStore(fileURL: storeURL)
+        let model = AppModel(
+            dictation: AppleSpeechService(),
+            clipboard: NSPasteboardClipboard(),
+            store: store
+        )
+        self.model = model
+        panelController = DictationPanelController(model: model)
+        statusBar = StatusBarController(model: model, store: store)
+        hotKey = HotKeyController(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey | shiftKey)) {
+            model.toggle()
         }
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "OpenWhisper", action: nil, keyEquivalent: ""))
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        item.menu = menu
-        statusItem = item
+        hotKey?.start()
     }
 }
