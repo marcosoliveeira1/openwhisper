@@ -28,7 +28,7 @@ Built with Swift, AppKit and Apple's Speech framework. Zero third-party dependen
 ## Build & Run
 
 ```bash
-git clone https://github.com/marcosoliveira1/openwhisper.git
+git clone https://github.com/marcosoliveeira1/openwhisper.git
 cd openwhisper
 make app
 open build/OpenWhisper.app
