@@ -11,7 +11,9 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
-    private var accumulated = ""
+    private var transcript = SegmentTranscript()
+    private var currentPartial = ""
+    private var sessionActive = false
     private var finalContinuation: CheckedContinuation<String?, Never>?
     private var resolved = false
     private var configObserver: NSObjectProtocol?
@@ -35,23 +37,60 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         guard try await authorize() else {
             throw FailureReason.permissionDenied
         }
+        transcript.reset()
+        currentPartial = ""
+        smoothedLevel = 0
+        resolved = false
+        sessionActive = true
+        do {
+            try startEngineAndTask()
+        } catch {
+            sessionActive = false
+            throw error
+        }
+    }
+
+    func finish() async -> String? {
+        sessionActive = false
+        stopCapture()
+        request?.endAudio()
+        return await withCheckedContinuation { continuation in
+            finalContinuation = continuation
+            resolved = false
+            Task {
+                try? await Task.sleep(for: .seconds(15))
+                self.resolveTimeout()
+            }
+        }
+    }
+
+    func cancel() async {
+        sessionActive = false
+        stopCapture()
+        task?.cancel()
+        request?.endAudio()
+        resolve(with: nil)
+        reset()
+    }
+
+    private func startEngineAndTask() throws {
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
             throw FailureReason.recognitionUnavailable
         }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         }
         self.request = request
-        accumulated = ""
-        resolved = false
 
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else {
             throw FailureReason.engineError("nenhum dispositivo de entrada de áudio")
         }
+        input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             request.append(buffer)
             guard let self, let channel = buffer.floatChannelData else { return }
@@ -70,11 +109,13 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
                 await self.emitLevel(level)
             }
         }
-        audioEngine.prepare()
-        do {
-            try audioEngine.start()
-        } catch {
-            throw FailureReason.engineError("falha ao iniciar captura de áudio: \(error.localizedDescription)")
+        if !audioEngine.isRunning {
+            audioEngine.prepare()
+            do {
+                try audioEngine.start()
+            } catch {
+                throw FailureReason.engineError("falha ao iniciar captura de áudio: \(error.localizedDescription)")
+            }
         }
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
@@ -83,49 +124,59 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
                 let text = result.bestTranscription.formattedString
                 let isFinal = result.isFinal
                 Task {
-                    await self.handleResult(text: text, isFinal: isFinal)
+                    await self.handleTaskUpdate(text: text, isFinal: isFinal, failed: false)
                 }
             }
             if error != nil {
                 Task {
-                    await self.handleFailure()
+                    await self.handleTaskUpdate(text: self.currentPartialText, isFinal: false, failed: true)
                 }
             }
         }
     }
 
-    func finish() async -> String? {
-        stopCapture()
-        request?.endAudio()
-        return await withCheckedContinuation { continuation in
-            finalContinuation = continuation
-            resolved = false
-            Task {
-                try? await Task.sleep(for: .seconds(15))
-                self.resolveTimeout()
-            }
+    private var currentPartialText: String {
+        transcript.combined(currentPartial)
+    }
+
+    private func handleTaskUpdate(text: String, isFinal: Bool, failed: Bool) {
+        if failed {
+            guard sessionActive else { return }
+            restartAfterSegmentEnd(text: text)
+            return
         }
-    }
-
-    func cancel() async {
-        stopCapture()
-        task?.cancel()
-        request?.endAudio()
-        resolve(with: nil)
-        reset()
-    }
-
-    private func handleResult(text: String, isFinal: Bool) {
-        accumulated = text
         if isFinal {
-            resolve(with: text)
-        } else {
-            onPartial?(text)
+            if sessionActive {
+                restartAfterSegmentEnd(text: text)
+            } else {
+                resolve(with: transcript.combined(text))
+            }
+            return
+        }
+        currentPartial = text
+        onPartial?(currentPartialText)
+    }
+
+    private func restartAfterSegmentEnd(text: String) {
+        transcript.finalize(with: text)
+        currentPartial = ""
+        onPartial?(transcript.finalizedPrefix)
+        restartRecognition()
+    }
+
+    private func restartRecognition() {
+        guard sessionActive else { return }
+        task = nil
+        do {
+            try startEngineAndTask()
+        } catch {
+            sessionActive = false
+            handleFailure()
         }
     }
 
     private func handleFailure() {
-        resolve(with: accumulated.isEmpty ? nil : accumulated)
+        resolve(with: currentPartialText.isEmpty ? nil : currentPartialText)
     }
 
     private func installConfigurationObserverIfNeeded() {
@@ -143,13 +194,13 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     }
 
     private func handleEngineStopped() {
-        guard task != nil else { return }
-        handleFailure()
+        guard sessionActive else { return }
+        restartRecognition()
     }
 
     private func resolveTimeout() {
         guard finalContinuation != nil else { return }
-        resolve(with: accumulated.isEmpty ? nil : accumulated)
+        resolve(with: currentPartialText.isEmpty ? nil : currentPartialText)
     }
 
     private func resolve(with text: String?) {
@@ -162,7 +213,8 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     private func reset() {
         request = nil
         task = nil
-        accumulated = ""
+        currentPartial = ""
+        transcript.reset()
         smoothedLevel = 0
     }
 
