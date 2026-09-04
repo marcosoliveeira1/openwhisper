@@ -10,6 +10,7 @@ final class DictationPanel: NSPanel {
 final class DictationPanelController {
     private let model: AppModel
     private let panel: DictationPanel
+    private let hostingView: NSHostingView<DictationView>
     private var escMonitor: Any?
     private var cancellable: AnyCancellable?
 
@@ -30,8 +31,7 @@ final class DictationPanelController {
         panel.hidesOnDeactivate = false
         panel.hasShadow = true
 
-        let hostingView = NSHostingView(rootView: DictationView(model: model))
-        hostingView.sizingOptions = [.preferredContentSize]
+        hostingView = NSHostingView(rootView: DictationView(model: model))
         panel.contentView = hostingView
 
         cancellable = model.$state
@@ -46,12 +46,28 @@ final class DictationPanelController {
     }
 
     private func present() {
+        resizeToFit()
         if !panel.isVisible {
             positionAtCenter()
             NSApp.activate(ignoringOtherApps: true)
             panel.makeKeyAndOrderFront(nil)
         }
         installEscMonitor()
+    }
+
+    private func resizeToFit() {
+        let size = hostingView.fittingSize
+        guard size.width > 1, size.height > 1 else { return }
+        let frame = panel.frame
+        panel.setFrame(
+            NSRect(
+                x: frame.midX - size.width / 2,
+                y: frame.midY - size.height / 2,
+                width: size.width,
+                height: size.height
+            ),
+            display: true
+        )
     }
 
     private func dismiss() {
