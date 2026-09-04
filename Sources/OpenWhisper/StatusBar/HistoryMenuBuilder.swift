@@ -13,6 +13,13 @@ struct MenuModel: Equatable {
 
         let title: String
         let kind: Kind
+        let isEnabled: Bool
+
+        init(title: String, kind: Kind, isEnabled: Bool = true) {
+            self.title = title
+            self.kind = kind
+            self.isEnabled = isEnabled
+        }
     }
 
     let items: [Item]
@@ -24,13 +31,13 @@ enum HistoryMenuBuilder {
     static func build(entries: [Transcription]) -> [MenuModel.Item] {
         var items: [MenuModel.Item] = []
         if entries.isEmpty {
-            items.append(MenuModel.Item(title: "Sem transcrições", kind: .empty))
+            items.append(MenuModel.Item(title: "Sem transcrições", kind: .empty, isEnabled: false))
         } else {
             for entry in entries {
                 items.append(MenuModel.Item(title: truncate(entry.text), kind: .transcription(text: entry.text)))
             }
         }
-        items.append(MenuModel.Item(title: "Limpar histórico", kind: .clear))
+        items.append(MenuModel.Item(title: "Limpar histórico", kind: .clear, isEnabled: !entries.isEmpty))
         items.append(MenuModel.Item(title: "Configurações…", kind: .settings))
         items.append(MenuModel.Item(title: "Sobre OpenWhisper", kind: .about))
         items.append(MenuModel.Item(title: "Sair", kind: .quit))

@@ -53,6 +53,17 @@ import Testing
         #expect(items.last?.title == "Sair")
     }
 
+    @Test func clearItemEnabledOnlyWhenHistoryExists() {
+        let withHistory = HistoryMenuBuilder.build(entries: [entry("texto")])
+        let clearWithHistory = withHistory.first { $0.kind == .clear }
+        #expect(clearWithHistory?.isEnabled == true)
+
+        let empty = HistoryMenuBuilder.build(entries: [])
+        let clearWhenEmpty = empty.first { $0.kind == .clear }
+        #expect(clearWhenEmpty?.isEnabled == false)
+        #expect(empty[0].isEnabled == false)
+    }
+
     @Test func bottomSectionOrderAfterHistory() {
         let items = HistoryMenuBuilder.build(entries: [entry("texto")])
         #expect(items[0].kind == .transcription(text: "texto"))
