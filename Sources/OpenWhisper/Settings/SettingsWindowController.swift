@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 struct SettingsView: View {
@@ -109,12 +110,14 @@ struct SettingsView: View {
             Section("Histórico") {
                 LabeledContent("Manter transcrições") {
                     HStack(spacing: 8) {
-                        TextField("Limite", text: $limitText)
+                        TextField("50", text: $limitText)
                             .multilineTextAlignment(.trailing)
-                            .frame(width: 64)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(width: 56)
                             .onSubmit(applyLimit)
                         Stepper("", onIncrement: { bumpLimit(5) }, onDecrement: { bumpLimit(-5) })
                             .labelsHidden()
+                            .fixedSize()
                     }
                 }
                 LabeledContent {
@@ -134,6 +137,9 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .padding(20)
         .frame(width: 440)
+        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
+            accessibilityTrusted = CGEventAutoPasteService.isTrusted()
+        }
     }
 
     private var versionString: String {
