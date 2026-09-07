@@ -3,6 +3,7 @@ BUNDLE_ID := br.marcos.openwhisper
 APP_DIR := build/$(APP_NAME).app
 CONTENTS := $(APP_DIR)/Contents
 MACOS_DIR := $(CONTENTS)/MacOS
+RESOURCES_DIR := $(CONTENTS)/Resources
 
 .PHONY: all build app run test clean
 
