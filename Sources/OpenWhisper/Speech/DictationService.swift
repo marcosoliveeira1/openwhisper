@@ -9,6 +9,7 @@ enum FailureReason: Error, Equatable {
 
 protocol DictationService: AnyObject, Sendable {
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) async
+    func setFailureHandler(_ handler: @escaping @Sendable (FailureReason) -> Void) async
 
     func start() async throws
     func finish() async -> String?

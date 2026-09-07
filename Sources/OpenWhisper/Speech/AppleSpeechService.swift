@@ -4,13 +4,18 @@ import Speech
 
 actor AppleSpeechService: DictationService, AudioLevelProviding {
     private var onPartial: (@Sendable (String) -> Void)?
+    private var onFailure: (@Sendable (FailureReason) -> Void)?
     private var onLevel: (@Sendable (Double) -> Void)?
     private var smoothedLevel: Double = 0
 
     private let locale = Locale(identifier: "pt-BR")
     private let audioEngine = AVAudioEngine()
+    private static let segmentLimit: Duration = .seconds(50)
+    private var recognizer: SFSpeechRecognizer?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    private var generation = 0
+    private var watchdog: Task<Void, Never>?
     private var transcript = SegmentTranscript()
     private var currentPartial = ""
     private var sessionActive = false
@@ -20,6 +25,10 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
 
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) {
         onPartial = handler
+    }
+
+    func setFailureHandler(_ handler: @escaping @Sendable (FailureReason) -> Void) {
+        onFailure = handler
     }
 
     func setLevelHandler(_ handler: @escaping @Sendable (Double) -> Void) {
@@ -37,6 +46,8 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         guard try await authorize() else {
             throw FailureReason.permissionDenied
         }
+        generation += 1
+        invalidateSegment()
         transcript.reset()
         currentPartial = ""
         smoothedLevel = 0
@@ -44,6 +55,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         sessionActive = true
         do {
             try startEngineAndTask()
+            scheduleWatchdog()
         } catch {
             sessionActive = false
             throw error
@@ -52,6 +64,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
 
     func finish() async -> String? {
         sessionActive = false
+        invalidateSegment()
         stopCapture()
         request?.endAudio()
         return await withCheckedContinuation { continuation in
@@ -66,6 +79,8 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
 
     func cancel() async {
         sessionActive = false
+        generation += 1
+        invalidateSegment()
         stopCapture()
         task?.cancel()
         request?.endAudio()
@@ -73,10 +88,15 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         reset()
     }
 
+    // MARK: - Segment lifecycle
+
     private func startEngineAndTask() throws {
-        guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
+        guard let recognizer = ensureRecognizer(), recognizer.isAvailable else {
             throw FailureReason.recognitionUnavailable
         }
+
+        generation += 1
+        let gen = generation
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -91,9 +111,9 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
             throw FailureReason.engineError("nenhum dispositivo de entrada de áudio")
         }
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
             request.append(buffer)
-            guard let self, let channel = buffer.floatChannelData else { return }
+            guard let channel = buffer.floatChannelData else { return }
             let frames = Int(buffer.frameLength)
             guard frames > 0 else { return }
             let data = channel[0]
@@ -124,30 +144,38 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
                 let text = result.bestTranscription.formattedString
                 let isFinal = result.isFinal
                 Task {
-                    await self.handleTaskUpdate(text: text, isFinal: isFinal, failed: false)
+                    await self.handleTaskUpdate(gen: gen, text: text, isFinal: isFinal, failed: false)
                 }
             }
             if error != nil {
                 Task {
-                    await self.handleTaskUpdate(text: self.currentPartialText, isFinal: false, failed: true)
+                    await self.handleTaskUpdate(gen: gen, text: "", isFinal: false, failed: true)
                 }
             }
         }
     }
 
-    private var currentPartialText: String {
-        transcript.combined(currentPartial)
+    private func ensureRecognizer() -> SFSpeechRecognizer? {
+        if let recognizer { return recognizer }
+        guard let fresh = SFSpeechRecognizer(locale: locale) else { return nil }
+        recognizer = fresh
+        return fresh
     }
 
-    private func handleTaskUpdate(text: String, isFinal: Bool, failed: Bool) {
+    private func handleTaskUpdate(gen: Int, text: String, isFinal: Bool, failed: Bool) {
+        guard gen == generation else { return }
         if failed {
-            guard sessionActive else { return }
-            restartAfterSegmentEnd(text: text)
+            guard !resolved else { return }
+            if sessionActive {
+                rotateSegment(text: currentPartial)
+            } else {
+                resolve(with: currentPartialText.isEmpty ? nil : currentPartialText)
+            }
             return
         }
         if isFinal {
             if sessionActive {
-                restartAfterSegmentEnd(text: text)
+                rotateSegment(text: text)
             } else {
                 resolve(with: transcript.combined(text))
             }
@@ -157,7 +185,8 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         onPartial?(currentPartialText)
     }
 
-    private func restartAfterSegmentEnd(text: String) {
+    /// Finalizes the current segment with `text` and starts a fresh recognition task.
+    private func rotateSegment(text: String) {
         transcript.finalize(with: text)
         currentPartial = ""
         onPartial?(transcript.finalizedPrefix)
@@ -166,31 +195,60 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
 
     private func restartRecognition() {
         guard sessionActive else { return }
-        task = nil
+        invalidateSegment()
         do {
             try startEngineAndTask()
+            scheduleWatchdog()
+        } catch {
+            scheduleRetry()
+        }
+    }
+
+    /// One quick retry before surfacing the failure — recognizer availability
+    /// can flicker momentarily between segments.
+    private func scheduleRetry() {
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            await self?.retrySegment()
+        }
+    }
+
+    private func retrySegment() {
+        guard sessionActive, !resolved else { return }
+        do {
+            try startEngineAndTask()
+            scheduleWatchdog()
         } catch {
             sessionActive = false
-            handleFailure()
+            let reason = (error as? FailureReason) ?? .engineError(error.localizedDescription)
+            onFailure?(reason)
         }
     }
 
-    private func handleFailure() {
-        resolve(with: currentPartialText.isEmpty ? nil : currentPartialText)
+    /// Rotates the segment before Apple's ~1 minute per-request cap kills the task.
+    private func scheduleWatchdog() {
+        watchdog?.cancel()
+        watchdog = Task { [weak self] in
+            try? await Task.sleep(for: Self.segmentLimit)
+            await self?.segmentTimedOut()
+        }
     }
 
-    private func installConfigurationObserverIfNeeded() {
-        guard configObserver == nil else { return }
-        configObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: audioEngine,
-            queue: nil
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task {
-                await self.handleEngineStopped()
-            }
-        }
+    private func segmentTimedOut() {
+        guard sessionActive, !resolved else { return }
+        rotateSegment(text: currentPartial)
+    }
+
+    private var currentPartialText: String {
+        transcript.combined(currentPartial)
+    }
+
+    private func invalidateSegment() {
+        task?.cancel()
+        task = nil
+        request = nil
+        watchdog?.cancel()
+        watchdog = nil
     }
 
     private func handleEngineStopped() {
@@ -223,6 +281,20 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
             audioEngine.stop()
         }
         audioEngine.inputNode.removeTap(onBus: 0)
+    }
+
+    private func installConfigurationObserverIfNeeded() {
+        guard configObserver == nil else { return }
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: audioEngine,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.handleEngineStopped()
+            }
+        }
     }
 
     private func authorize() async throws -> Bool {

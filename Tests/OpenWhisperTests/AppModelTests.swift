@@ -11,10 +11,19 @@ final class MockDictationService: DictationService, AudioLevelProviding, @unchec
     private(set) var startCount = 0
     private(set) var cancelCount = 0
     private(set) var partialHandler: (@Sendable (String) -> Void)?
+    private(set) var failureHandler: (@Sendable (FailureReason) -> Void)?
     private var finishContinuation: CheckedContinuation<String?, Never>?
 
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) async {
         partialHandler = handler
+    }
+
+    func setFailureHandler(_ handler: @escaping @Sendable (FailureReason) -> Void) async {
+        failureHandler = handler
+    }
+
+    func emitFailure(_ reason: FailureReason) {
+        failureHandler?(reason)
     }
 
     func emitPartial(_ text: String) {

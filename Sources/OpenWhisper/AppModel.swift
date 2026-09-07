@@ -40,6 +40,12 @@ final class AppModel: ObservableObject {
                     self?.liveTranscript = text
                 }
             }
+            await dictation.setFailureHandler { [weak self] reason in
+                Task { @MainActor in
+                    guard let self, case .recording = self.state else { return }
+                    self.state = .failed(reason)
+                }
+            }
             if let levelProvider = dictation as? AudioLevelProviding {
                 await levelProvider.setLevelHandler { [weak self] level in
                     Task { @MainActor in
