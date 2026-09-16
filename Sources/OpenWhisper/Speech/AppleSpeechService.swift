@@ -1,6 +1,9 @@
 import AVFoundation
 import Foundation
 import Speech
+import os
+
+private let speechLog = Logger(subsystem: "br.marcos.openwhisper", category: "speech")
 
 actor AppleSpeechService: DictationService, AudioLevelProviding {
     private var onPartial: (@Sendable (String) -> Void)?
@@ -22,6 +25,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     private var finalContinuation: CheckedContinuation<String?, Never>?
     private var resolved = false
     private var configObserver: NSObjectProtocol?
+    private var taskFailureStreak = 0
 
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) {
         onPartial = handler
@@ -52,6 +56,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         currentPartial = ""
         smoothedLevel = 0
         resolved = false
+        taskFailureStreak = 0
         sessionActive = true
         do {
             try startEngineAndTask()
@@ -106,6 +111,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
             request.requiresOnDeviceRecognition = true
         }
         self.request = request
+        speechLog.info("segment started (gen \(gen), onDevice=\(recognizer.supportsOnDeviceRecognition), available=\(recognizer.isAvailable))")
 
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -147,12 +153,13 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
                 let text = result.bestTranscription.formattedString
                 let isFinal = result.isFinal
                 Task {
-                    await self.handleTaskUpdate(gen: gen, text: text, isFinal: isFinal, failed: false)
+                    await self.handleTaskUpdate(gen: gen, text: text, isFinal: isFinal, failed: false, errorText: nil)
                 }
             }
-            if error != nil {
+            if let error {
+                speechLog.error("recognition task error: \(error.localizedDescription, privacy: .public)")
                 Task {
-                    await self.handleTaskUpdate(gen: gen, text: "", isFinal: false, failed: true)
+                    await self.handleTaskUpdate(gen: gen, text: "", isFinal: false, failed: true, errorText: error.localizedDescription)
                 }
             }
         }
@@ -165,26 +172,41 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         return fresh
     }
 
-    private func handleTaskUpdate(gen: Int, text: String, isFinal: Bool, failed: Bool) {
+    private func handleTaskUpdate(gen: Int, text: String, isFinal: Bool, failed: Bool, errorText: String?) {
         guard gen == generation else { return }
         if failed {
             guard !resolved else { return }
-            if sessionActive {
+            taskFailureStreak += 1
+            speechLog.error("task failed (streak \(self.taskFailureStreak)): \(errorText ?? "unknown", privacy: .public)")
+            if sessionActive, taskFailureStreak < 2 {
                 rotateSegment(text: currentPartial)
+            } else if sessionActive {
+                sessionActive = false
+                onFailure?(.engineError(errorText ?? "reconhecimento de fala indisponível"))
             } else {
                 resolve(with: currentPartialText.isEmpty ? nil : currentPartialText)
             }
             return
         }
+        taskFailureStreak = 0
         if isFinal {
             if sessionActive {
+                speechLog.info("segment final: \(text.count) chars (prefix \(self.transcript.finalizedPrefix.count))")
                 rotateSegment(text: text)
             } else {
                 resolve(with: transcript.combined(text))
             }
             return
         }
+        // On-device hypotheses can reset mid-session (e.g. after a pause):
+        // the new partial replaces instead of extending. Carry the previous
+        // text into the finalized prefix so it isn't lost.
+        if currentPartial.count >= 10, text.count < currentPartial.count / 2 {
+            speechLog.info("hypothesis reset (\(self.currentPartial.count) → \(text.count) chars); carrying prefix forward")
+            transcript.finalize(with: currentPartial)
+        }
         currentPartial = text
+        speechLog.debug("partial: \(self.currentPartialText.count) chars")
         onPartial?(currentPartialText)
     }
 
@@ -193,6 +215,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         transcript.finalize(with: text)
         currentPartial = ""
         onPartial?(transcript.finalizedPrefix)
+        speechLog.info("rotating segment (prefix \(self.transcript.finalizedPrefix.count) chars)")
         restartRecognition()
     }
 
@@ -261,6 +284,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
 
     private func resolveTimeout() {
         guard finalContinuation != nil else { return }
+        speechLog.error("finish timed out after 15s (partial \(self.currentPartialText.count) chars)")
         resolve(with: currentPartialText.isEmpty ? nil : currentPartialText)
     }
 
@@ -271,6 +295,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         task?.cancel()
         task = nil
         request = nil
+        speechLog.info("resolved with \(text?.count ?? -1) chars")
         continuation.resume(returning: text)
     }
 
