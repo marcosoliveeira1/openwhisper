@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DictationView: View {
     @ObservedObject var model: AppModel
+    var openTrayMenu: (() -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -19,7 +20,7 @@ struct DictationView: View {
         }
         .padding(22)
         .frame(width: 380)
-        .background(cardColor, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(cardColor.opacity(AppSettings.panelOpacity), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(borderColor, lineWidth: 1)
@@ -104,10 +105,10 @@ struct DictationView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 140)
+        .frame(maxWidth: .infinity, minHeight: 88, maxHeight: 180)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(fieldColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(fieldColor.opacity(min(1, AppSettings.panelOpacity + 0.06)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(borderColor, lineWidth: 1)
@@ -116,6 +117,22 @@ struct DictationView: View {
 
     private func controls(showsFinish: Bool) -> some View {
         HStack(spacing: 10) {
+            if let openTrayMenu {
+                Button(action: openTrayMenu) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 9)
+                        .background(Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(borderColor, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Menu e configurações")
+            }
             Spacer()
             Button(action: model.cancel) {
                 Text(cancelTitle)
@@ -198,23 +215,23 @@ struct Waveform: View {
     var muted = false
 
     private let bars = 12
-    private let staticPattern: [CGFloat] = [22, 36, 50, 30, 52, 38, 26, 46, 32, 50, 24, 42]
+    private let staticPattern: [CGFloat] = [16, 27, 38, 22, 39, 28, 20, 34, 24, 38, 18, 32]
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(0..<bars, id: \.self) { i in
                 Capsule()
                     .fill(accent.opacity(muted ? 0.4 : 1))
-                    .frame(width: 5, height: height(for: i))
+                    .frame(width: 4, height: height(for: i))
                     .animation(.easeOut(duration: 0.12), value: samples)
             }
         }
-        .frame(height: 54)
+        .frame(height: 40)
     }
 
     private func height(for i: Int) -> CGFloat {
         if let samples, samples.count == bars {
-            return max(8, CGFloat(samples[i]) * 52)
+            return max(6, CGFloat(samples[i]) * 38)
         }
         return staticPattern[i % staticPattern.count]
     }

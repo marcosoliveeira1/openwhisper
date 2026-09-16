@@ -30,8 +30,13 @@ enum AppSettings {
     }
 
     static var appearance: String {
-        get { defaults.string(forKey: "appearance") ?? "light" }
+        get { defaults.string(forKey: "appearance") ?? "system" }
         set { defaults.set(newValue, forKey: "appearance") }
+    }
+
+    static var panelOpacity: Double {
+        get { defaults.object(forKey: "panelOpacity") as? Double ?? 0.85 }
+        set { defaults.set(newValue, forKey: "panelOpacity") }
     }
 }
 

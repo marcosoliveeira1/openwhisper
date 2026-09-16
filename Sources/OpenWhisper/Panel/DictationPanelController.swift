@@ -14,7 +14,7 @@ final class DictationPanelController {
     private var escMonitor: Any?
     private var cancellable: AnyCancellable?
 
-    init(model: AppModel) {
+    init(model: AppModel, openTrayMenu: @escaping () -> Void = {}) {
         self.model = model
         panel = DictationPanel(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 220),
@@ -31,7 +31,7 @@ final class DictationPanelController {
         panel.hidesOnDeactivate = false
         panel.hasShadow = true
 
-        hostingView = NSHostingView(rootView: DictationView(model: model))
+        hostingView = NSHostingView(rootView: DictationView(model: model, openTrayMenu: openTrayMenu))
         panel.contentView = hostingView
 
         cancellable = model.$state

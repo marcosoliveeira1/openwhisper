@@ -41,6 +41,15 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         populate(menu: menu, with: items)
     }
 
+    /// Pops up the same menu as the status bar item, anchored at the mouse
+    /// location — fallback for when the status item is not visible.
+    func popUpMenu() {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menuNeedsUpdate(menu)
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
     private func refreshCache() {
         Task {
             cachedEntries = await store.all()

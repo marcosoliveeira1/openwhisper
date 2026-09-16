@@ -21,7 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isAutoPasteEnabled: { AppSettings.autoPasteEnabled }
         )
         self.model = model
-        panelController = DictationPanelController(model: model)
         let hotKey = HotKeyController(
             keyCode: AppSettings.hotKeyCode,
             modifiers: AppSettings.hotKeyModifiers
@@ -31,8 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hotKey = hotKey
         hotKey.start()
         let settingsWindow = SettingsWindowController(model: model, hotKey: hotKey, store: store)
-        statusBar = StatusBarController(model: model, store: store) {
+        let statusBar = StatusBarController(model: model, store: store) {
             settingsWindow.show()
+        }
+        self.statusBar = statusBar
+        panelController = DictationPanelController(model: model) { [weak statusBar] in
+            statusBar?.popUpMenu()
         }
     }
 }

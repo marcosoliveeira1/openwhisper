@@ -10,12 +10,14 @@ struct SettingsView: View {
     @State private var autoPasteEnabled: Bool
     @State private var accessibilityTrusted: Bool
     @State private var appearance: String
+    @State private var panelOpacity: Double
 
     var onHotKeyChanged: (UInt32, UInt32) -> Void
     var onLimitChanged: (Int) -> Void
     var onClearHistory: () -> Void
     var onAutoPasteChanged: (Bool) -> Void
     var onAppearanceChanged: (String) -> Void
+    var onPanelOpacityChanged: (Double) -> Void
 
     init(
         hotKeyCode: UInt32,
@@ -23,11 +25,13 @@ struct SettingsView: View {
         historyLimit: Int,
         autoPasteEnabled: Bool,
         appearance: String,
+        panelOpacity: Double,
         onHotKeyChanged: @escaping (UInt32, UInt32) -> Void,
         onLimitChanged: @escaping (Int) -> Void,
         onClearHistory: @escaping () -> Void,
         onAutoPasteChanged: @escaping (Bool) -> Void,
-        onAppearanceChanged: @escaping (String) -> Void
+        onAppearanceChanged: @escaping (String) -> Void,
+        onPanelOpacityChanged: @escaping (Double) -> Void
     ) {
         _hotKeyCode = State(initialValue: hotKeyCode)
         _hotKeyModifiers = State(initialValue: hotKeyModifiers)
@@ -36,11 +40,13 @@ struct SettingsView: View {
         _autoPasteEnabled = State(initialValue: autoPasteEnabled)
         _accessibilityTrusted = State(initialValue: CGEventAutoPasteService.isTrusted())
         _appearance = State(initialValue: appearance)
+        _panelOpacity = State(initialValue: panelOpacity)
         self.onHotKeyChanged = onHotKeyChanged
         self.onLimitChanged = onLimitChanged
         self.onClearHistory = onClearHistory
         self.onAutoPasteChanged = onAutoPasteChanged
         self.onAppearanceChanged = onAppearanceChanged
+        self.onPanelOpacityChanged = onPanelOpacityChanged
     }
 
     var body: some View {
@@ -76,6 +82,20 @@ struct SettingsView: View {
                     .frame(width: 240)
                     .onChange(of: appearance) { _, newValue in
                         onAppearanceChanged(newValue)
+                    }
+                }
+                LabeledContent("Transparência do painel") {
+                    Picker("", selection: $panelOpacity) {
+                        Text("Sólido").tag(1.0)
+                        Text("85%").tag(0.85)
+                        Text("70%").tag(0.7)
+                        Text("55%").tag(0.55)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 240)
+                    .onChange(of: panelOpacity) { _, newValue in
+                        onPanelOpacityChanged(newValue)
                     }
                 }
             }
@@ -184,6 +204,7 @@ final class SettingsWindowController {
             historyLimit: AppSettings.historyLimit,
             autoPasteEnabled: AppSettings.autoPasteEnabled,
             appearance: AppSettings.appearance,
+            panelOpacity: AppSettings.panelOpacity,
             onHotKeyChanged: { code, modifiers in
                 hotKey.update(keyCode: code, modifiers: modifiers)
                 AppSettings.hotKeyCode = code
@@ -204,6 +225,9 @@ final class SettingsWindowController {
             onAppearanceChanged: { mode in
                 AppSettings.appearance = mode
                 NSApp.appearance = AppearanceMode.nsAppearance(mode)
+            },
+            onPanelOpacityChanged: { opacity in
+                AppSettings.panelOpacity = opacity
             }
         )
 
