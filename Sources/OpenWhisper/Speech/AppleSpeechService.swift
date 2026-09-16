@@ -111,8 +111,9 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
             throw FailureReason.engineError("nenhum dispositivo de entrada de áudio")
         }
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
-            request.append(buffer)
+        nonisolated(unsafe) let tapRequest = request
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { @Sendable buffer, _ in
+            tapRequest.append(buffer)
             guard let channel = buffer.floatChannelData else { return }
             let frames = Int(buffer.frameLength)
             guard frames > 0 else { return }
@@ -138,7 +139,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
             }
         }
 
-        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+        task = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
             guard let self else { return }
             if let result {
                 let text = result.bestTranscription.formattedString
@@ -289,7 +290,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
             forName: .AVAudioEngineConfigurationChange,
             object: audioEngine,
             queue: nil
-        ) { [weak self] _ in
+        ) { @Sendable [weak self] _ in
             guard let self else { return }
             Task {
                 await self.handleEngineStopped()
