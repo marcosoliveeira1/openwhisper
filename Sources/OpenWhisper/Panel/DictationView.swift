@@ -88,10 +88,21 @@ struct DictationView: View {
     }
 
     private var transcriptBox: some View {
-        ScrollView {
-            Text(model.liveTranscript.isEmpty ? "Fale alguma coisa…" : model.liveTranscript)
-                .foregroundStyle(model.liveTranscript.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollViewReader { proxy in
+            ScrollView {
+                Text(model.liveTranscript.isEmpty ? "Fale alguma coisa…" : model.liveTranscript)
+                    .foregroundStyle(model.liveTranscript.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Color.clear
+                    .frame(height: 1)
+                    .id("transcript-bottom")
+            }
+            .scrollIndicators(.visible)
+            .onChange(of: model.liveTranscript) { _, _ in
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo("transcript-bottom", anchor: .bottom)
+                }
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 140)
         .padding(.horizontal, 16)
