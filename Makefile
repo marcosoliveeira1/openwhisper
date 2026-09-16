@@ -13,9 +13,10 @@ build:
 	swift build -c release
 
 app: build
-	mkdir -p $(MACOS_DIR)
+	mkdir -p $(MACOS_DIR) $(RESOURCES_DIR)
 	cp .build/release/$(APP_NAME) $(MACOS_DIR)/
 	cp Info.plist $(CONTENTS)/
+	cp Resources/AppIcon.icns $(RESOURCES_DIR)/
 	plutil -replace CFBundleIdentifier -string $(BUNDLE_ID) $(CONTENTS)/Info.plist
 	touch $(APP_DIR)
 	codesign --force --sign - $(APP_DIR)
