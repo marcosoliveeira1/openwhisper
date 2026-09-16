@@ -147,7 +147,10 @@ final class AppModel: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             let text = await dictation.finish()
-            await completeFinish(text: text ?? "")
+            // The box on screen mirrors the service's accumulated text; if the
+            // engine fails to deliver a final result, that text is still valid.
+            let effective = text.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? liveTranscript
+            await completeFinish(text: effective)
         }
     }
 

@@ -92,6 +92,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     }
 
     func finish() async -> String? {
+        speechLog.info("finish: active=\(self.sessionActive), paused=\(self.isPaused), request=\(self.request != nil), task=\(self.task != nil), partial=\(self.currentPartial.count), prefix=\(self.transcript.finalizedPrefix.count)")
         guard sessionActive else { return nil }
         if isPaused {
             sessionActive = false
