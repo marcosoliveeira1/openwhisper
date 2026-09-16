@@ -26,6 +26,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     private var resolved = false
     private var configObserver: NSObjectProtocol?
     private var taskFailureStreak = 0
+    private var isPaused = false
 
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) {
         onPartial = handler
@@ -57,6 +58,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         smoothedLevel = 0
         resolved = false
         taskFailureStreak = 0
+        isPaused = false
         sessionActive = true
         do {
             try startEngineAndTask()
@@ -67,8 +69,37 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         }
     }
 
+    /// Halts capture and recognition while keeping the accumulated transcript.
+    func pause() async {
+        guard sessionActive, !isPaused, !resolved else { return }
+        isPaused = true
+        speechLog.info("paused")
+        request?.endAudio()
+        invalidateSegment()
+        stopCapture()
+    }
+
+    func resume() async {
+        guard sessionActive, isPaused, !resolved else { return }
+        isPaused = false
+        speechLog.info("resumed")
+        do {
+            try startEngineAndTask()
+            scheduleWatchdog()
+        } catch {
+            scheduleRetry()
+        }
+    }
+
     func finish() async -> String? {
         guard sessionActive else { return nil }
+        if isPaused {
+            sessionActive = false
+            isPaused = false
+            let text = currentPartialText
+            speechLog.info("finish while paused, resolving \(text.count) chars")
+            return text.isEmpty ? nil : text
+        }
         sessionActive = false
         watchdog?.cancel()
         watchdog = nil
@@ -86,6 +117,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
 
     func cancel() async {
         sessionActive = false
+        isPaused = false
         generation += 1
         invalidateSegment()
         stopCapture()
@@ -190,14 +222,20 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         }
         taskFailureStreak = 0
         if isFinal {
-            if sessionActive {
+            if sessionActive, !isPaused {
                 speechLog.info("segment final: \(text.count) chars (prefix \(self.transcript.finalizedPrefix.count))")
                 rotateSegment(text: text)
+            } else if sessionActive {
+                // Final arrived while paused: bank the text, don't restart.
+                transcript.finalize(with: text)
+                currentPartial = ""
+                onPartial?(transcript.finalizedPrefix)
             } else {
                 resolve(with: transcript.combined(text))
             }
             return
         }
+        guard !isPaused else { return }
         // On-device hypotheses can reset mid-session (e.g. after a pause):
         // the new partial replaces instead of extending. Carry the previous
         // text into the finalized prefix so it isn't lost.
@@ -220,7 +258,7 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     }
 
     private func restartRecognition() {
-        guard sessionActive else { return }
+        guard sessionActive, !isPaused else { return }
         invalidateSegment()
         do {
             try startEngineAndTask()

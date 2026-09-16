@@ -12,8 +12,11 @@ enum DictationState: Equatable {
 final class AppModel: ObservableObject {
     @Published private(set) var state: DictationState = .idle
     @Published private(set) var liveTranscript = ""
+    @Published private(set) var isPaused = false
     @Published private(set) var historyVersion = 0
     @Published private(set) var levelSamples: [Double] = Array(repeating: 0.08, count: 12)
+
+    private var pausedAt: Date?
 
     private let dictation: any DictationService
     private let clipboard: any Clipboard
@@ -76,6 +79,25 @@ final class AppModel: ObservableObject {
         finishDictation()
     }
 
+    func togglePause() {
+        guard case .recording(let startedAt) = state else { return }
+        if isPaused {
+            let duration = Date().timeIntervalSince(pausedAt ?? Date())
+            state = .recording(startedAt: startedAt.addingTimeInterval(duration))
+            isPaused = false
+            pausedAt = nil
+            Task { [weak self] in
+                await self?.dictation.resume()
+            }
+        } else {
+            isPaused = true
+            pausedAt = Date()
+            Task { [weak self] in
+                await self?.dictation.pause()
+            }
+        }
+    }
+
     func cancel() {
         guard state != .idle else { return }
         Task {
@@ -84,6 +106,8 @@ final class AppModel: ObservableObject {
         FocusRestorer.activate(pid: targetPID)
         targetPID = nil
         state = .idle
+        isPaused = false
+        pausedAt = nil
         liveTranscript = ""
     }
 
@@ -100,6 +124,8 @@ final class AppModel: ObservableObject {
 
     private func startDictation() {
         liveTranscript = ""
+        isPaused = false
+        pausedAt = nil
         levelSamples = Array(repeating: 0.08, count: 12)
         targetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         state = .recording(startedAt: Date())

@@ -38,7 +38,7 @@ struct DictationView: View {
                     }
                 }
             }
-            Waveform(accent: accentColor, samples: model.levelSamples)
+            Waveform(accent: accentColor, samples: model.isPaused ? nil : model.levelSamples, muted: model.isPaused)
             transcriptBox
             controls(showsFinish: true)
         }
@@ -118,7 +118,12 @@ struct DictationView: View {
     private func controls(showsFinish: Bool) -> some View {
         HStack(spacing: 10) {
             if let openTrayMenu {
-                Button(action: openTrayMenu) {
+                Button {
+                    if case .recording = model.state, !model.isPaused {
+                        model.togglePause()
+                    }
+                    openTrayMenu()
+                } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
@@ -132,6 +137,22 @@ struct DictationView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Menu e configurações")
+            }
+            if showsFinish {
+                Button(action: model.togglePause) {
+                    Image(systemName: model.isPaused ? "play.fill" : "pause.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 31)
+                        .padding(.vertical, 9)
+                        .background(Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(borderColor, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(model.isPaused ? "Retomar" : "Pausar")
             }
             Spacer()
             Button(action: model.cancel) {

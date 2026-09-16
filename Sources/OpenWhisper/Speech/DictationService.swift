@@ -12,6 +12,8 @@ protocol DictationService: AnyObject, Sendable {
     func setFailureHandler(_ handler: @escaping @Sendable (FailureReason) -> Void) async
 
     func start() async throws
+    func pause() async
+    func resume() async
     func finish() async -> String?
     func cancel() async
 }

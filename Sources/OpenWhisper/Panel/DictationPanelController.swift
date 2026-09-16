@@ -6,11 +6,17 @@ final class DictationPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
+/// Forces the whole view surface to act as a drag handle for the borderless
+/// panel; interactive SwiftUI controls still receive their own events.
+private final class DraggableHostingView<Content: View>: NSHostingView<Content> {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
 @MainActor
 final class DictationPanelController {
     private let model: AppModel
     private let panel: DictationPanel
-    private let hostingView: NSHostingView<DictationView>
+    private let hostingView: DraggableHostingView<DictationView>
     private var escMonitor: Any?
     private var cancellable: AnyCancellable?
 
@@ -30,8 +36,9 @@ final class DictationPanelController {
         panel.backgroundColor = .clear
         panel.hidesOnDeactivate = false
         panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
 
-        hostingView = NSHostingView(rootView: DictationView(model: model, openTrayMenu: openTrayMenu))
+        hostingView = DraggableHostingView(rootView: DictationView(model: model, openTrayMenu: openTrayMenu))
         panel.contentView = hostingView
 
         cancellable = model.$state

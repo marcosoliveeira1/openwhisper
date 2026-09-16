@@ -55,6 +55,17 @@ final class MockDictationService: DictationService, AudioLevelProviding, @unchec
         cancelCount += 1
     }
 
+    private(set) var pauseCount = 0
+    private(set) var resumeCount = 0
+
+    func pause() async {
+        pauseCount += 1
+    }
+
+    func resume() async {
+        resumeCount += 1
+    }
+
     var levelHandler: (@Sendable (Double) -> Void)?
 
     func setLevelHandler(_ handler: @escaping @Sendable (Double) -> Void) async {
