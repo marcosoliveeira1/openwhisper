@@ -63,8 +63,10 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
     }
 
     func finish() async -> String? {
+        guard sessionActive else { return nil }
         sessionActive = false
-        invalidateSegment()
+        watchdog?.cancel()
+        watchdog = nil
         stopCapture()
         request?.endAudio()
         return await withCheckedContinuation { continuation in
@@ -266,6 +268,9 @@ actor AppleSpeechService: DictationService, AudioLevelProviding {
         guard !resolved, let continuation = finalContinuation else { return }
         resolved = true
         finalContinuation = nil
+        task?.cancel()
+        task = nil
+        request = nil
         continuation.resume(returning: text)
     }
 
