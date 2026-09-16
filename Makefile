@@ -7,6 +7,13 @@ RESOURCES_DIR := $(CONTENTS)/Resources
 
 .PHONY: all build app run test clean
 
+# CLT 27.0 ships without libSwiftUIMacros.dylib (SwiftUI macros broke);
+# build against the previous SDK while the workaround is needed.
+SDK_265 := $(wildcard /Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk)
+ifneq ($(SDK_265),)
+export SDKROOT := $(SDK_265)
+endif
+
 all: app
 
 build:
