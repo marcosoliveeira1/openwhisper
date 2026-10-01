@@ -127,10 +127,7 @@ struct DictationView: View {
                 .multilineTextAlignment(.center)
             if reason == .permissionDenied {
                 Button("Abrir Ajustes de Acessibilidade") {
-                    CGEventAutoPasteService.promptPermission()
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                        NSWorkspace.shared.open(url)
-                    }
+                    CGEventAutoPasteService.openAccessibilitySettings()
                 }
                 .font(.callout)
             }

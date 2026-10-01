@@ -132,14 +132,18 @@ struct SettingsView: View {
                 if !accessibilityTrusted {
                     LabeledContent {
                         Button("Abrir Ajustes de Acessibilidade") {
-                            CGEventAutoPasteService.promptPermission()
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                NSWorkspace.shared.open(url)
-                            }
+                            CGEventAutoPasteService.openAccessibilitySettings()
                         }
                     } label: {
                         Text("Permissão pendente")
                             .foregroundStyle(.orange)
+                    }
+                    LabeledContent {
+                        EmptyView()
+                    } label: {
+                        Text("Ativou e continua pendente? Cada `make app` gera um binário novo e o macOS invalida o grant: remova o OpenWhisper da lista com (–), reabra o app e ative de novo. O texto é sempre copiado (⌘V manual funciona); só a colagem automática precisa dessa permissão.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
