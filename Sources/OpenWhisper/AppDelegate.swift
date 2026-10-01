@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .appendingPathComponent("OpenWhisper", isDirectory: true)
             .appendingPathComponent("history.json")
         let store = TranscriptionStore(fileURL: storeURL, capacity: AppSettings.historyLimit)
-        let polisher: (any TextPolisher)? = {
+        let applePolisher: (any TextPolisher)? = {
             #if canImport(FoundationModels)
             if #available(macOS 26, *) {
                 return FoundationModelsPolisher()
@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             #endif
             return nil
         }()
+        // Routing polisher reads the Settings-selected backend at call time,
+        // so switching provider needs no restart.
+        let polisher: any TextPolisher = RoutingPolisher(apple: applePolisher)
         let model = AppModel(
             dictation: AppleSpeechService(),
             clipboard: NSPasteboardClipboard(),

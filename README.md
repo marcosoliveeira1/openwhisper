@@ -14,7 +14,7 @@ Built with Swift, AppKit and Apple's Speech framework. Zero third-party dependen
 - **Live transcript** with timer while you speak (Portuguese – Brazil)
 - **Auto-copy** to clipboard on Finish — or let **auto-paste** deliver the text into the previously focused app (requires Accessibility permission)
 - **Cancel** (`Esc`) discards everything — no side effects
-- **AI cleanup (✨, live)** — while you speak, closed sentences are polished one at a time via on-device Apple Intelligence (macOS 26+, no API key, private) and shown in a "Com IA ✨" block below the raw transcript; unpunctuated speech follows after a short pause. The copy icon in that block grabs the polished-so-far text without closing. Toggle: "Limpeza ao vivo" in Settings
+- **AI cleanup (✨, live)** — while you speak, closed sentences are polished one at a time and shown in a "Com IA ✨" block below the raw transcript; unpunctuated speech follows after a short pause. The copy icon in that block grabs the polished-so-far text without closing. Backend: Apple Intelligence on-device by default (macOS 26+, no API key, private), or an OpenAI-compatible gateway — **OpenRouter**, **Groq**, or **OpenCode** (custom base URL + bearer + model) — picked in Settings → IA. Toggle: "Limpeza ao vivo" in Settings
 - **Tray menu** with Configurações first, then transcription history (click to copy), clear history, about, quit
 - **Configurable** — hotkey recorder and history limit (1–500) in the settings UI, persisted between launches
 - **On-device speech recognition** when the system supports it (falls back to Apple's server-based recognition otherwise)

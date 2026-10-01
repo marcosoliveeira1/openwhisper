@@ -9,6 +9,10 @@ struct SettingsView: View {
     @State private var lastValidLimit: Int
     @State private var autoPasteEnabled: Bool
     @State private var livePolishEnabled: Bool
+    @State private var aiProviderRaw: String
+    @State private var gatewayBaseURL: String
+    @State private var gatewayKey: String
+    @State private var gatewayModel: String
     @State private var accessibilityTrusted: Bool
     @State private var appearance: String
     @State private var panelOpacity: Double
@@ -27,6 +31,7 @@ struct SettingsView: View {
         historyLimit: Int,
         autoPasteEnabled: Bool,
         livePolishEnabled: Bool,
+        aiProviderRaw: String,
         appearance: String,
         panelOpacity: Double,
         onHotKeyChanged: @escaping (UInt32, UInt32) -> Void,
@@ -43,6 +48,11 @@ struct SettingsView: View {
         _lastValidLimit = State(initialValue: historyLimit)
         _autoPasteEnabled = State(initialValue: autoPasteEnabled)
         _livePolishEnabled = State(initialValue: livePolishEnabled)
+        _aiProviderRaw = State(initialValue: aiProviderRaw)
+        let initialProvider = AIProvider(rawValue: aiProviderRaw) ?? .apple
+        _gatewayBaseURL = State(initialValue: AppSettings.gatewayBaseURL(for: initialProvider))
+        _gatewayKey = State(initialValue: AppSettings.gatewayKey(for: initialProvider))
+        _gatewayModel = State(initialValue: AppSettings.gatewayModel(for: initialProvider))
         _accessibilityTrusted = State(initialValue: CGEventAutoPasteService.isTrusted())
         _appearance = State(initialValue: appearance)
         _panelOpacity = State(initialValue: panelOpacity)
@@ -134,6 +144,49 @@ struct SettingsView: View {
                 }
             }
             Section("IA") {
+                LabeledContent("Provedor") {
+                    Picker("", selection: $aiProviderRaw) {
+                        ForEach(AIProvider.allCases, id: \.rawValue) { provider in
+                            Text(provider.title).tag(provider.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 240)
+                    .onChange(of: aiProviderRaw) { _, newValue in
+                        AppSettings.aiProviderRaw = newValue
+                        loadGatewayFields()
+                    }
+                }
+                if let provider = AIProvider(rawValue: aiProviderRaw), !provider.isLocal {
+                    LabeledContent("URL base") {
+                        TextField(provider.defaultBaseURL ?? "https://…", text: $gatewayBaseURL)
+                            .frame(width: 240)
+                            .onChange(of: gatewayBaseURL) { _, _ in
+                                saveGatewayFields()
+                            }
+                    }
+                    LabeledContent("Chave API") {
+                        SecureField("Bearer token", text: $gatewayKey)
+                            .frame(width: 240)
+                            .onChange(of: gatewayKey) { _, _ in
+                                saveGatewayFields()
+                            }
+                    }
+                    LabeledContent("Modelo") {
+                        TextField(provider.defaultModel.isEmpty ? "model-id" : provider.defaultModel, text: $gatewayModel)
+                            .frame(width: 240)
+                            .onChange(of: gatewayModel) { _, _ in
+                                saveGatewayFields()
+                            }
+                    }
+                    LabeledContent {
+                        EmptyView()
+                    } label: {
+                        Text(gatewayHint(for: provider))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 LabeledContent("Durante a fala") {
                     Toggle("Limpeza ao vivo", isOn: $livePolishEnabled)
                         .onChange(of: livePolishEnabled) { _, newValue in
@@ -188,6 +241,35 @@ struct SettingsView: View {
         return "OpenWhisper \(short ?? "0.1")"
     }
 
+    private var selectedProvider: AIProvider {
+        AIProvider(rawValue: aiProviderRaw) ?? .apple
+    }
+
+    private func loadGatewayFields() {
+        gatewayBaseURL = AppSettings.gatewayBaseURL(for: selectedProvider)
+        gatewayKey = AppSettings.gatewayKey(for: selectedProvider)
+        gatewayModel = AppSettings.gatewayModel(for: selectedProvider)
+    }
+
+    private func saveGatewayFields() {
+        AppSettings.setGatewayBaseURL(gatewayBaseURL, for: selectedProvider)
+        AppSettings.setGatewayKey(gatewayKey, for: selectedProvider)
+        AppSettings.setGatewayModel(gatewayModel, for: selectedProvider)
+    }
+
+    private func gatewayHint(for provider: AIProvider) -> String {
+        switch provider {
+        case .apple:
+            return ""
+        case .openRouter:
+            return "Compatível com /chat/completions. A chave fica salva neste Mac."
+        case .groq:
+            return "Compatível com /chat/completions. A chave fica salva neste Mac."
+        case .openCode:
+            return "Gateway OpenAI-compatível: informe base URL, bearer e modelo."
+        }
+    }
+
     private func applyLimit() {
         guard let value = Int(limitText.trimmingCharacters(in: .whitespaces)) else {
             limitText = String(lastValidLimit)
@@ -225,6 +307,7 @@ final class SettingsWindowController {
             historyLimit: AppSettings.historyLimit,
             autoPasteEnabled: AppSettings.autoPasteEnabled,
             livePolishEnabled: AppSettings.livePolishEnabled,
+            aiProviderRaw: AppSettings.aiProviderRaw,
             appearance: AppSettings.appearance,
             panelOpacity: AppSettings.panelOpacity,
             onHotKeyChanged: { code, modifiers in

@@ -34,6 +34,42 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "livePolishEnabled") }
     }
 
+    // MARK: - AI gateway (stored via GatewayStore; plain UserDefaults so the
+    // off-main polish loop can read the selection without @MainActor).
+
+    static var aiProviderRaw: String {
+        get { GatewayStore.provider().rawValue }
+        set {
+            if let provider = AIProvider(rawValue: newValue) {
+                GatewayStore.setProvider(provider)
+            }
+        }
+    }
+
+    static func gatewayBaseURL(for provider: AIProvider) -> String {
+        GatewayStore.config(for: provider).baseURL
+    }
+
+    static func gatewayKey(for provider: AIProvider) -> String {
+        GatewayStore.config(for: provider).apiKey
+    }
+
+    static func gatewayModel(for provider: AIProvider) -> String {
+        GatewayStore.config(for: provider).model
+    }
+
+    static func setGatewayBaseURL(_ value: String, for provider: AIProvider) {
+        GatewayStore.setBaseURL(value, for: provider)
+    }
+
+    static func setGatewayKey(_ value: String, for provider: AIProvider) {
+        GatewayStore.setKey(value, for: provider)
+    }
+
+    static func setGatewayModel(_ value: String, for provider: AIProvider) {
+        GatewayStore.setModel(value, for: provider)
+    }
+
     static var appearance: String {
         get { defaults.string(forKey: "appearance") ?? "system" }
         set { defaults.set(newValue, forKey: "appearance") }

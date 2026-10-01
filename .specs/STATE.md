@@ -17,5 +17,5 @@
 
 ## Handoff
 
-**In-flight:** Prompt IA reforçado (AD-010 v6): prompt por chamada com delimitadores `---`, sessão nova a cada chamada (sem sangria de conversa), instrução "devolve igual se já está certo", guarda `isPlausible` (rejeita eco/alucinação fora da banda 0.5–2.0x de palavras). Motivo: "alô testando" → "Alô, testando the transcription, 23, alô, testing." 70/70 testes verdes, instalado em /Applications. Pendente: UAT em voz real.
-**Next step:** UAT interativo (voz real PT: falar "alô testando" e frases PT+EN → bloco IA deve devolver igual ou só corrigir EN, nunca conversar/inventar).
+**In-flight:** Gateways de IA (AD-011): `AIProvider` (apple/openRouter/groq/openCode) + `HTTPChatPolisher` (`POST {base}/chat/completions`, temperature 0, reusa prompt/clean/isPlausible) + `RoutingPolisher` (troca sem restart; leitura via `GatewayStore` nonisolated); Settings → IA com picker + baseURL/chave/modelo por provider (OpenCode sem preset). 85/85 testes verdes (GatewayTests serializada — suites paralelas corriam race em UserDefaults/handler), instalado em /Applications. Conhecido: `swift test` falha ~70% das vezes com TestingMacros plugin missing (flake do CLT 27/SDK26.5, reproduz em pacote mínimo; retry até verde). Chaves em UserDefaults plaintext (melhorar p/ Keychain depois?).
+**Next step:** UAT com gateway real (Groq/OpenRouter: colar chave em Configurações → IA, falar e ver latência/qualidade vs Apple).
