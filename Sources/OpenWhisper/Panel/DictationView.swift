@@ -30,7 +30,7 @@ struct DictationView: View {
     private var recordingBody: some View {
         VStack(spacing: 14) {
             if case .recording(let startedAt) = model.state {
-                header(title: "Gravando") {
+                header(title: model.livePolishOn ? "Gravando · IA" : "Gravando") {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Text(formatElapsed(since: startedAt))
                             .font(.system(size: 15, design: .monospaced))
@@ -40,8 +40,69 @@ struct DictationView: View {
             }
             Waveform(accent: accentColor, samples: model.isPaused ? nil : model.levelSamples, muted: model.isPaused)
             transcriptBox
+            if model.livePolishOn {
+                livePolishBox
+            }
             controls(showsFinish: true)
         }
+    }
+
+    /// Live IA preview: polished stable sentences below the raw transcript.
+    /// Closed sentences go immediately; unpunctuated speech follows after a
+    /// short pause. The copy icon grabs the polished-so-far text without
+    /// closing — Finalizar still copies the original.
+    private var livePolishBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Com IA ✨")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(accentColor)
+                if model.livePolishActive {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer()
+                Button(action: model.copyLivePolished) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(model.livePolishedText.isEmpty ? .secondary.opacity(0.4) : accentColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.livePolishedText.isEmpty)
+                .help("Copiar texto com IA")
+            }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(model.livePolishedText.isEmpty ? "Aguardando primeira frase…" : model.livePolishedText)
+                        .foregroundStyle(model.livePolishedText.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Color.clear
+                        .frame(height: 1)
+                        .id("livepolish-bottom")
+                }
+                .scrollIndicators(.visible)
+                .onChange(of: model.livePolishedText) { _, _ in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("livepolish-bottom", anchor: .bottom)
+                    }
+                }
+            }
+            if let livePolishError = model.livePolishError {
+                Text(livePolishError)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 140)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(fieldColor.opacity(min(1, AppSettings.panelOpacity + 0.06)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(accentColor.opacity(0.6), lineWidth: 1.5)
+        )
     }
 
     private var transcribingBody: some View {

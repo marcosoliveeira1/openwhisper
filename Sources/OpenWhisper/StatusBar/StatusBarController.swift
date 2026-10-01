@@ -58,7 +58,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     private func populate(menu: NSMenu, with items: [MenuModel.Item]) {
         for item in items {
-            if item.kind == .settings || item.kind == .quit {
+            // Section breaks: Configurações… tops the menu (separator after),
+            // Sair stays last (separator before).
+            if item.kind == .quit, !menu.items.isEmpty {
                 menu.addItem(.separator())
             }
             let menuItem = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
@@ -86,6 +88,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             }
             menuItem.isEnabled = item.isEnabled
             menu.addItem(menuItem)
+            if item.kind == .settings {
+                menu.addItem(.separator())
+            }
         }
     }
 

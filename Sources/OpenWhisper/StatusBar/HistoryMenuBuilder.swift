@@ -30,6 +30,7 @@ enum HistoryMenuBuilder {
 
     static func build(entries: [Transcription]) -> [MenuModel.Item] {
         var items: [MenuModel.Item] = []
+        items.append(MenuModel.Item(title: "Configurações…", kind: .settings))
         if entries.isEmpty {
             items.append(MenuModel.Item(title: "Sem transcrições", kind: .empty, isEnabled: false))
         } else {
@@ -38,7 +39,6 @@ enum HistoryMenuBuilder {
             }
         }
         items.append(MenuModel.Item(title: "Limpar histórico", kind: .clear, isEnabled: !entries.isEmpty))
-        items.append(MenuModel.Item(title: "Configurações…", kind: .settings))
         items.append(MenuModel.Item(title: "Sobre OpenWhisper", kind: .about))
         items.append(MenuModel.Item(title: "Sair", kind: .quit))
         return items

@@ -13,12 +13,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .appendingPathComponent("OpenWhisper", isDirectory: true)
             .appendingPathComponent("history.json")
         let store = TranscriptionStore(fileURL: storeURL, capacity: AppSettings.historyLimit)
+        let polisher: (any TextPolisher)? = {
+            #if canImport(FoundationModels)
+            if #available(macOS 26, *) {
+                return FoundationModelsPolisher()
+            }
+            #endif
+            return nil
+        }()
         let model = AppModel(
             dictation: AppleSpeechService(),
             clipboard: NSPasteboardClipboard(),
             store: store,
             autoPaste: CGEventAutoPasteService(),
-            isAutoPasteEnabled: { AppSettings.autoPasteEnabled }
+            polisher: polisher,
+            isAutoPasteEnabled: { AppSettings.autoPasteEnabled },
+            isLivePolishEnabled: { AppSettings.livePolishEnabled }
         )
         self.model = model
         let hotKey = HotKeyController(

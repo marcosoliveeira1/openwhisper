@@ -134,6 +134,7 @@ final class MockAutoPasteService: AutoPasteService, @unchecked Sendable {
         await model.toggle()
         await waitUntil(speech.startCount == 1)
         await model.toggle()
+        // Finish delivers the original text directly and closes.
         await waitUntil(model.state == .idle)
 
         #expect(clipboard.copied == ["olá mundo"])

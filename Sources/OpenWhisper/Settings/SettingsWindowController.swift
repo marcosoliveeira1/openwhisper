@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var limitText: String
     @State private var lastValidLimit: Int
     @State private var autoPasteEnabled: Bool
+    @State private var livePolishEnabled: Bool
     @State private var accessibilityTrusted: Bool
     @State private var appearance: String
     @State private var panelOpacity: Double
@@ -16,6 +17,7 @@ struct SettingsView: View {
     var onLimitChanged: (Int) -> Void
     var onClearHistory: () -> Void
     var onAutoPasteChanged: (Bool) -> Void
+    var onLivePolishChanged: (Bool) -> Void
     var onAppearanceChanged: (String) -> Void
     var onPanelOpacityChanged: (Double) -> Void
 
@@ -24,12 +26,14 @@ struct SettingsView: View {
         hotKeyModifiers: UInt32,
         historyLimit: Int,
         autoPasteEnabled: Bool,
+        livePolishEnabled: Bool,
         appearance: String,
         panelOpacity: Double,
         onHotKeyChanged: @escaping (UInt32, UInt32) -> Void,
         onLimitChanged: @escaping (Int) -> Void,
         onClearHistory: @escaping () -> Void,
         onAutoPasteChanged: @escaping (Bool) -> Void,
+        onLivePolishChanged: @escaping (Bool) -> Void,
         onAppearanceChanged: @escaping (String) -> Void,
         onPanelOpacityChanged: @escaping (Double) -> Void
     ) {
@@ -38,6 +42,7 @@ struct SettingsView: View {
         _limitText = State(initialValue: String(historyLimit))
         _lastValidLimit = State(initialValue: historyLimit)
         _autoPasteEnabled = State(initialValue: autoPasteEnabled)
+        _livePolishEnabled = State(initialValue: livePolishEnabled)
         _accessibilityTrusted = State(initialValue: CGEventAutoPasteService.isTrusted())
         _appearance = State(initialValue: appearance)
         _panelOpacity = State(initialValue: panelOpacity)
@@ -45,6 +50,7 @@ struct SettingsView: View {
         self.onLimitChanged = onLimitChanged
         self.onClearHistory = onClearHistory
         self.onAutoPasteChanged = onAutoPasteChanged
+        self.onLivePolishChanged = onLivePolishChanged
         self.onAppearanceChanged = onAppearanceChanged
         self.onPanelOpacityChanged = onPanelOpacityChanged
     }
@@ -127,6 +133,21 @@ struct SettingsView: View {
                     }
                 }
             }
+            Section("IA") {
+                LabeledContent("Durante a fala") {
+                    Toggle("Limpeza ao vivo", isOn: $livePolishEnabled)
+                        .onChange(of: livePolishEnabled) { _, newValue in
+                            onLivePolishChanged(newValue)
+                        }
+                }
+                LabeledContent {
+                    EmptyView()
+                } label: {
+                    Text("Mostra o texto corrigido abaixo do original enquanto você fala. Só frases fechadas vão para a IA, uma por vez.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section("Histórico") {
                 LabeledContent("Manter transcrições") {
                     HStack(spacing: 8) {
@@ -203,6 +224,7 @@ final class SettingsWindowController {
             hotKeyModifiers: AppSettings.hotKeyModifiers,
             historyLimit: AppSettings.historyLimit,
             autoPasteEnabled: AppSettings.autoPasteEnabled,
+            livePolishEnabled: AppSettings.livePolishEnabled,
             appearance: AppSettings.appearance,
             panelOpacity: AppSettings.panelOpacity,
             onHotKeyChanged: { code, modifiers in
@@ -221,6 +243,9 @@ final class SettingsWindowController {
             },
             onAutoPasteChanged: { enabled in
                 AppSettings.autoPasteEnabled = enabled
+            },
+            onLivePolishChanged: { enabled in
+                AppSettings.livePolishEnabled = enabled
             },
             onAppearanceChanged: { mode in
                 AppSettings.appearance = mode

@@ -29,6 +29,11 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "autoPasteEnabled") }
     }
 
+    static var livePolishEnabled: Bool {
+        get { defaults.object(forKey: "livePolishEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "livePolishEnabled") }
+    }
+
     static var appearance: String {
         get { defaults.string(forKey: "appearance") ?? "system" }
         set { defaults.set(newValue, forKey: "appearance") }

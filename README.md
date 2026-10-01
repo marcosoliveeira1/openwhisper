@@ -14,7 +14,8 @@ Built with Swift, AppKit and Apple's Speech framework. Zero third-party dependen
 - **Live transcript** with timer while you speak (Portuguese – Brazil)
 - **Auto-copy** to clipboard on Finish — or let **auto-paste** deliver the text into the previously focused app (requires Accessibility permission)
 - **Cancel** (`Esc`) discards everything — no side effects
-- **Tray menu** with transcription history (click to copy), clear history, settings, about, quit
+- **AI cleanup (✨, live)** — while you speak, closed sentences are polished one at a time via on-device Apple Intelligence (macOS 26+, no API key, private) and shown in a "Com IA ✨" block below the raw transcript; unpunctuated speech follows after a short pause. The copy icon in that block grabs the polished-so-far text without closing. Toggle: "Limpeza ao vivo" in Settings
+- **Tray menu** with Configurações first, then transcription history (click to copy), clear history, about, quit
 - **Configurable** — hotkey recorder and history limit (1–500) in the settings UI, persisted between launches
 - **On-device speech recognition** when the system supports it (falls back to Apple's server-based recognition otherwise)
 - **Lightweight** — tray-only app (no Dock icon), native frameworks only, history persisted as JSON
@@ -54,10 +55,10 @@ Grant permissions in **System Settings → Privacy & Security** if a prompt is d
 ## Usage
 
 1. Press `⌘⇧G` anywhere — the panel opens focused, recording
-2. Speak in Portuguese
-3. `↩` / **Finalizar** (or `⌘⇧G` again) → transcribe + copy (+ auto-paste) + close
+2. Speak in Portuguese (English tech terms OK — cleaned text appears in the "Com IA ✨" block below; the copy icon there grabs it without closing)
+3. `↩` / **Finalizar** → copies the original text (+ auto-paste) + closes
 4. `Esc` / **Cancelar** → discard
-5. Tray menu → history (click to copy), Configurações, Sobre, Sair
+5. Tray menu → Configurações, history (click to copy), Sobre, Sair
 
 Settings let you change the hotkey, the history limit, and toggle auto-paste.
 
@@ -65,14 +66,14 @@ Settings let you change the hotkey, the history limit, and toggle auto-paste.
 
 ```
 Sources/OpenWhisper/
-├── AppDelegate.swift          # Composition root
-├── AppModel.swift             # State machine (idle → recording → transcribing)
+├── AppDelegate.swift          # Composition root (wires FoundationModelsPolisher on macOS 26+)
+├── AppModel.swift             # State machine (idle → recording → transcribing) + on-demand AI polish
 ├── AutoPaste.swift            # CGEvent ⌘V into previously focused app
 ├── Clipboard.swift            # NSPasteboard abstraction
 ├── HotKeyController.swift     # Carbon global hotkey, re-registerable
 ├── TranscriptionStore.swift   # Actor + JSON persistence, configurable cap
-├── Speech/                    # DictationService protocol + AppleSpeechService
-├── Panel/                     # NSPanel + SwiftUI dictation UI
+├── Speech/                    # DictationService + AppleSpeechService + TextPolisher/FoundationModelsPolisher
+├── Panel/                     # NSPanel + SwiftUI dictation UI (✨ cleanup button)
 ├── Settings/                  # Settings window, hotkey recorder, UserDefaults
 └── StatusBar/                 # Tray menu + pure menu model builder
 ```

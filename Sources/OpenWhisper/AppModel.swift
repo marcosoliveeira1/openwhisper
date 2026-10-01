@@ -15,6 +15,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var isPaused = false
     @Published private(set) var historyVersion = 0
     @Published private(set) var levelSamples: [Double] = Array(repeating: 0.08, count: 12)
+    /// Live IA preview during recording: polished stable sentences, joined.
+    @Published private(set) var livePolishedText = ""
+    @Published private(set) var livePolishActive = false
+    @Published private(set) var livePolishError: String? = nil
+    /// True while this session polishes closed sentences live.
+    @Published private(set) var livePolishOn = false
 
     private var pausedAt: Date?
 
@@ -22,25 +28,44 @@ final class AppModel: ObservableObject {
     private let clipboard: any Clipboard
     private let store: TranscriptionStore
     private let autoPaste: (any AutoPasteService)?
+    private let polisher: (any TextPolisher)?
     private let isAutoPasteEnabled: () -> Bool
+    private let isLivePolishEnabled: () -> Bool
     private var targetPID: pid_t?
+    /// Serial live-polish loop (one IA call at a time, in order).
+    private var livePolishTask: Task<Void, Never>?
+    /// Units already polished live, in send order (preview = joined).
+    private var livePolishedSentences: [String] = []
+    /// Units queued for the serial loop but not yet polished.
+    private var livePendingQueue: [String] = []
+    /// Raw-text prefix already sent to the IA this session. The loop only
+    /// ever sends `newTail` beyond this — each word goes once, in order.
+    private var liveConsumedRaw = ""
+    /// Debounce for unpunctuated speech (see polishStableTail).
+    private var liveDebounceTask: Task<Void, Never>?
+    /// Silence before the stable tail is sent. Internal for tests.
+    var liveStabilityDelay: Duration = .seconds(3)
 
     init(
         dictation: any DictationService,
         clipboard: any Clipboard,
         store: TranscriptionStore,
         autoPaste: (any AutoPasteService)? = nil,
-        isAutoPasteEnabled: @escaping () -> Bool = { false }
+        polisher: (any TextPolisher)? = nil,
+        isAutoPasteEnabled: @escaping () -> Bool = { false },
+        isLivePolishEnabled: @escaping () -> Bool = { true }
     ) {
         self.dictation = dictation
         self.clipboard = clipboard
         self.store = store
         self.autoPaste = autoPaste
+        self.polisher = polisher
         self.isAutoPasteEnabled = isAutoPasteEnabled
+        self.isLivePolishEnabled = isLivePolishEnabled
         Task {
             await dictation.setPartialHandler { [weak self] text in
                 Task { @MainActor in
-                    self?.liveTranscript = text
+                    self?.handlePartial(text)
                 }
             }
             await dictation.setFailureHandler { [weak self] reason in
@@ -64,6 +89,105 @@ final class AppModel: ObservableObject {
         levelSamples.append(max(0.06, min(1, level)))
     }
 
+    /// Partial updates only matter while recording.
+    /// Closed sentences go to the serial live-polish loop immediately; the
+    /// debounce covers unpunctuated speech (Apple partials rarely carry
+    /// `.?!` mid-speech) once the transcript stabilizes.
+    private func handlePartial(_ text: String) {
+        guard case .recording = state else { return }
+        liveTranscript = text
+        scheduleLivePolish(for: text)
+        armLiveDebounce(for: text)
+    }
+
+    /// Immediate path: new stable content appeared. Sends only the part
+    /// beyond `liveConsumedRaw` (a pause tail may already cover its head).
+    private func scheduleLivePolish(for text: String) {
+        guard livePolishOn, polisher?.isAvailable == true else { return }
+        let (stable, _) = PolishPrompt.splitLive(text)
+        guard !stable.isEmpty else { return }
+        let region = stable.joined(separator: " ")
+        let unit = PolishPrompt.newTail(current: region, since: liveConsumedRaw)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !unit.isEmpty else { return }
+        liveConsumedRaw = region.trimmingCharacters(in: .whitespacesAndNewlines)
+        enqueueLive(PolishPrompt.chunk(unit))
+    }
+
+    /// Pause fallback: when the transcript stops changing for
+    /// `liveStabilityDelay`, polish the stable tail too. The word-diff dedups
+    /// identical repeats — no resends, no per-syllable spam.
+    private func armLiveDebounce(for text: String) {
+        guard livePolishOn, polisher?.isAvailable == true else { return }
+        liveDebounceTask?.cancel()
+        liveDebounceTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: self.liveStabilityDelay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self.polishStableTail(text)
+        }
+    }
+
+    private func polishStableTail(_ snapshot: String) {
+        guard case .recording = state, livePolishOn,
+              polisher?.isAvailable == true else { return }
+        let tail = PolishPrompt.newTail(current: snapshot, since: liveConsumedRaw)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tail.isEmpty else { return }
+        liveConsumedRaw = snapshot.trimmingCharacters(in: .whitespacesAndNewlines)
+        enqueueLive(PolishPrompt.chunk(tail))
+    }
+
+    /// Append units and run the serial loop (one IA call at a time, in order —
+    /// no overlapping requests, no stale overwrite).
+    private func enqueueLive(_ units: [String]) {
+        guard !units.isEmpty else { return }
+        livePendingQueue.append(contentsOf: units)
+        guard livePolishTask == nil else { return }
+        livePolishActive = true
+        livePolishTask = Task { [weak self] in
+            guard let self else { return }
+            while let sentence = await self.nextLiveSentence() {
+                if Task.isCancelled { break }
+                do {
+                    let polished = try await self.polisher?.polish(sentence) ?? sentence
+                    await self.appendLivePolished(polished: polished)
+                } catch let error as PolishError {
+                    // Consumed already advanced at enqueue time, so a failed
+                    // unit never resends live; the review screen retries it.
+                    await self.setLivePolishError(error.message)
+                } catch {
+                    await self.setLivePolishError("Falha na limpeza com IA: \(error.localizedDescription)")
+                }
+            }
+            await self.finishLivePolishLoop()
+        }
+    }
+
+    private func nextLiveSentence() async -> String? {
+        guard !livePendingQueue.isEmpty else { return nil }
+        return livePendingQueue.removeFirst()
+    }
+
+    private func appendLivePolished(polished: String) async {
+        livePolishedSentences.append(PolishPrompt.clean(polished))
+        livePolishedText = livePolishedSentences.joined(separator: " ")
+        livePolishError = nil
+    }
+
+    private func setLivePolishError(_ message: String) async {
+        livePolishError = message
+    }
+
+    private func finishLivePolishLoop() async {
+        livePolishTask = nil
+        livePolishActive = false
+    }
+
     func toggle() {
         switch state {
         case .idle, .failed:
@@ -76,7 +200,22 @@ final class AppModel: ObservableObject {
     }
 
     func finish() {
-        finishDictation()
+        switch state {
+        case .recording:
+            finishDictation()
+        default:
+            break
+        }
+    }
+
+    /// Copy icon in the live IA box: copies the polished-so-far text without
+    /// closing or touching history — the committed transcription still goes
+    /// through Finalizar (original text).
+    func copyLivePolished() {
+        guard case .recording = state else { return }
+        let text = livePolishedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        clipboard.copy(text)
     }
 
     func togglePause() {
@@ -109,6 +248,22 @@ final class AppModel: ObservableObject {
         isPaused = false
         pausedAt = nil
         liveTranscript = ""
+        resetLivePolish()
+    }
+
+    /// Stop the serial loop and clear session state. Called on start (fresh
+    /// session), cancel, and deliver.
+    private func resetLivePolish() {
+        livePolishTask?.cancel()
+        livePolishTask = nil
+        liveDebounceTask?.cancel()
+        liveDebounceTask = nil
+        livePendingQueue = []
+        liveConsumedRaw = ""
+        livePolishedSentences = []
+        livePolishedText = ""
+        livePolishActive = false
+        livePolishError = nil
     }
 
     func copyToClipboard(_ text: String) {
@@ -126,6 +281,10 @@ final class AppModel: ObservableObject {
         liveTranscript = ""
         isPaused = false
         pausedAt = nil
+        resetLivePolish()
+        // Live IA preview for closed sentences; off when the model can't run
+        // or the user disabled it in Settings.
+        livePolishOn = (polisher?.isAvailable == true) && isLivePolishEnabled()
         levelSamples = Array(repeating: 0.08, count: 12)
         targetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         state = .recording(startedAt: Date())
@@ -141,20 +300,32 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Finish stops capture and delivers the ORIGINAL text immediately:
+    /// copy + history + close + auto-paste. The live IA box is a preview
+    /// with its own copy icon — it never blocks or replaces this path.
+    /// The live-polish loop is stopped here.
     private func finishDictation() {
         guard case .recording = state else { return }
+        livePolishOn = false
+        livePolishTask?.cancel()
+        livePolishTask = nil
+        liveDebounceTask?.cancel()
+        liveDebounceTask = nil
+        livePendingQueue = []
+        livePolishActive = false
         state = .transcribing
         Task { [weak self] in
             guard let self else { return }
-            let text = await dictation.finish()
+            let serviceText = await dictation.finish()
             // The box on screen mirrors the service's accumulated text; if the
             // engine fails to deliver a final result, that text is still valid.
-            let effective = text.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? liveTranscript
+            let effective = serviceText.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? liveTranscript
             await completeFinish(text: effective)
         }
     }
 
-    private func completeFinish(text: String) async {
+    /// Finish path: copy + history + close + auto-paste.
+    private func deliver(text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             state = .failed(.noSpeech)
@@ -166,10 +337,16 @@ final class AppModel: ObservableObject {
         state = .idle
         let pid = targetPID
         targetPID = nil
+        liveTranscript = ""
+        resetLivePolish()
         if isAutoPasteEnabled(), let autoPaste {
             Task {
                 await autoPaste.paste(into: pid)
             }
         }
+    }
+
+    private func completeFinish(text: String) async {
+        await deliver(text: text)
     }
 }
