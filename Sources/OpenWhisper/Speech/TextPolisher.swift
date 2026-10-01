@@ -23,6 +23,16 @@ protocol TextPolisher: Sendable {
     /// Human-readable reason when `isAvailable` is false.
     var availabilityMessage: String? { get }
     func polish(_ text: String) async throws -> String
+    /// Live-window variant: `context` is already-polished text sent as
+    /// read-only reference (never rewritten) so the model resolves pronouns,
+    /// tense, and sentence boundaries. Default ignores it.
+    func polish(_ text: String, context: String) async throws -> String
+}
+
+extension TextPolisher {
+    func polish(_ text: String, context: String) async throws -> String {
+        try await polish(text)
+    }
 }
 
 /// Prompt + output cleanup. Pure, so it's unit-testable without the model.
@@ -52,6 +62,49 @@ enum PolishPrompt {
         \(text)
         ---
         """
+    }
+
+    /// Window prompt with read-only intersection: `context` is already-polished
+    /// text from the previous window(s). The model must use it only to resolve
+    /// ambiguity — never repeat or rewrite it. Empty context falls back to
+    /// the plain prompt.
+    static func promptWithContext(_ text: String, context: String) -> String {
+        let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContext.isEmpty else { return prompt(for: text) }
+        return """
+            Previous polished text (context ONLY — do NOT repeat or rewrite it, \
+            use it only to resolve pronouns, tense, and sentence boundaries).
+            ---
+            \(trimmedContext)
+            ---
+            Correct the transcription between the --- markers. Return ONLY the corrected text.
+            ---
+            \(text)
+            ---
+            """
+    }
+
+    /// Suffix of already-polished sentences for the next window's context.
+    /// Append-only preview never rewrites, so this is just a bounded tail
+    /// (default ~300 chars) — enough for sense, small for latency/cost.
+    static func contextTail(from polished: [String], maxChars: Int = 300) -> String {
+        guard !polished.isEmpty, maxChars > 0 else { return "" }
+        let joined = polished.joined(separator: " ")
+        guard joined.count > maxChars else { return joined }
+        let suffix = joined.suffix(maxChars)
+        // Avoid starting mid-word: cut at the first space when possible.
+        if let space = suffix.firstIndex(of: " ") {
+            return String(suffix[suffix.index(after: space)...])
+        }
+        return String(suffix)
+    }
+
+    /// Minimum size for a timer-window send. Below this the tail is likely a
+    /// syllable/fragment the next partial will revise — skip it.
+    static func isWindowWorthy(_ tail: String) -> Bool {
+        let trimmed = tail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 15 else { return false }
+        return trimmed.split(separator: " ", omittingEmptySubsequences: true).count >= 3
     }
 
     /// Plausibility guard: real cleanup only fixes spelling/punctuation, so

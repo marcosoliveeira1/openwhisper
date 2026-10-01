@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var lastValidLimit: Int
     @State private var autoPasteEnabled: Bool
     @State private var livePolishEnabled: Bool
+    @State private var livePolishWindowSeconds: Int
     @State private var aiProviderRaw: String
     @State private var gatewayBaseURL: String
     @State private var gatewayKey: String
@@ -22,6 +23,7 @@ struct SettingsView: View {
     var onClearHistory: () -> Void
     var onAutoPasteChanged: (Bool) -> Void
     var onLivePolishChanged: (Bool) -> Void
+    var onLivePolishWindowChanged: (Int) -> Void
     var onAppearanceChanged: (String) -> Void
     var onPanelOpacityChanged: (Double) -> Void
 
@@ -31,6 +33,7 @@ struct SettingsView: View {
         historyLimit: Int,
         autoPasteEnabled: Bool,
         livePolishEnabled: Bool,
+        livePolishWindowSeconds: Int,
         aiProviderRaw: String,
         appearance: String,
         panelOpacity: Double,
@@ -39,6 +42,7 @@ struct SettingsView: View {
         onClearHistory: @escaping () -> Void,
         onAutoPasteChanged: @escaping (Bool) -> Void,
         onLivePolishChanged: @escaping (Bool) -> Void,
+        onLivePolishWindowChanged: @escaping (Int) -> Void,
         onAppearanceChanged: @escaping (String) -> Void,
         onPanelOpacityChanged: @escaping (Double) -> Void
     ) {
@@ -48,6 +52,7 @@ struct SettingsView: View {
         _lastValidLimit = State(initialValue: historyLimit)
         _autoPasteEnabled = State(initialValue: autoPasteEnabled)
         _livePolishEnabled = State(initialValue: livePolishEnabled)
+        _livePolishWindowSeconds = State(initialValue: livePolishWindowSeconds)
         _aiProviderRaw = State(initialValue: aiProviderRaw)
         let initialProvider = AIProvider(rawValue: aiProviderRaw) ?? .apple
         _gatewayBaseURL = State(initialValue: AppSettings.gatewayBaseURL(for: initialProvider))
@@ -61,6 +66,7 @@ struct SettingsView: View {
         self.onClearHistory = onClearHistory
         self.onAutoPasteChanged = onAutoPasteChanged
         self.onLivePolishChanged = onLivePolishChanged
+        self.onLivePolishWindowChanged = onLivePolishWindowChanged
         self.onAppearanceChanged = onAppearanceChanged
         self.onPanelOpacityChanged = onPanelOpacityChanged
     }
@@ -138,7 +144,20 @@ struct SettingsView: View {
                     .onChange(of: livePolishEnabled) { _, newValue in
                         onLivePolishChanged(newValue)
                     }
-                Text("Mostra o texto corrigido abaixo do original enquanto você fala. Só frases fechadas vão para a IA, uma por vez.")
+                LabeledContent("Janela de correção") {
+                    HStack(spacing: 8) {
+                        Text("\(livePolishWindowSeconds)s")
+                            .font(.system(.body, design: .monospaced))
+                            .frame(width: 40, alignment: .trailing)
+                        Stepper("", onIncrement: { bumpWindow(1) }, onDecrement: { bumpWindow(-1) })
+                            .labelsHidden()
+                            .fixedSize()
+                    }
+                }
+                .onChange(of: livePolishWindowSeconds) { _, newValue in
+                    onLivePolishWindowChanged(newValue)
+                }
+                Text("Mostra o texto corrigido abaixo do original enquanto você fala. Frases fechadas vão na hora; o resto é corrigido em janelas de \(livePolishWindowSeconds)s, com o trecho anterior como contexto.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -325,6 +344,10 @@ struct SettingsView: View {
         lastValidLimit = clamped
         onLimitChanged(clamped)
     }
+
+    private func bumpWindow(_ delta: Int) {
+        livePolishWindowSeconds = min(30, max(5, livePolishWindowSeconds + delta))
+    }
 }
 
 @MainActor
@@ -345,6 +368,7 @@ final class SettingsWindowController {
             historyLimit: AppSettings.historyLimit,
             autoPasteEnabled: AppSettings.autoPasteEnabled,
             livePolishEnabled: AppSettings.livePolishEnabled,
+            livePolishWindowSeconds: AppSettings.livePolishWindowSeconds,
             aiProviderRaw: AppSettings.aiProviderRaw,
             appearance: AppSettings.appearance,
             panelOpacity: AppSettings.panelOpacity,
@@ -367,6 +391,9 @@ final class SettingsWindowController {
             },
             onLivePolishChanged: { enabled in
                 AppSettings.livePolishEnabled = enabled
+            },
+            onLivePolishWindowChanged: { seconds in
+                AppSettings.livePolishWindowSeconds = seconds
             },
             onAppearanceChanged: { mode in
                 AppSettings.appearance = mode

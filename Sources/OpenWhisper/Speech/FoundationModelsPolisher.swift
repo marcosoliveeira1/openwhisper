@@ -31,12 +31,16 @@ final class FoundationModelsPolisher: TextPolisher, Sendable {
     }
 
     func polish(_ text: String) async throws -> String {
+        try await polish(text, context: "")
+    }
+
+    func polish(_ text: String, context: String) async throws -> String {
         guard isAvailable else {
             throw PolishError.unavailable(availabilityMessage ?? "Limpeza com IA indisponível")
         }
         do {
             let session = LanguageModelSession(instructions: PolishPrompt.instructions)
-            let response = try await session.respond(to: PolishPrompt.prompt(for: text))
+            let response = try await session.respond(to: PolishPrompt.promptWithContext(text, context: context))
             let cleaned = PolishPrompt.clean(response.content)
             guard !cleaned.isEmpty else {
                 throw PolishError.failed("resposta vazia do modelo")

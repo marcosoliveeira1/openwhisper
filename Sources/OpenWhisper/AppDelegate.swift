@@ -31,7 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             autoPaste: CGEventAutoPasteService(),
             polisher: polisher,
             isAutoPasteEnabled: { AppSettings.autoPasteEnabled },
-            isLivePolishEnabled: { AppSettings.livePolishEnabled }
+            isLivePolishEnabled: { AppSettings.livePolishEnabled },
+            liveWindowSeconds: { AppSettings.livePolishWindowSeconds }
         )
         self.model = model
         let hotKey = HotKeyController(

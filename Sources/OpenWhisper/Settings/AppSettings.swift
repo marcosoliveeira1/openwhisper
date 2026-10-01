@@ -34,6 +34,15 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "livePolishEnabled") }
     }
 
+    /// Window-timer interval for live correction (seconds). Clamped 5–30.
+    static var livePolishWindowSeconds: Int {
+        get {
+            let raw = defaults.object(forKey: "livePolishWindowSeconds") as? Int ?? 10
+            return min(30, max(5, raw))
+        }
+        set { defaults.set(min(30, max(5, newValue)), forKey: "livePolishWindowSeconds") }
+    }
+
     // MARK: - AI gateway (stored via GatewayStore; plain UserDefaults so the
     // off-main polish loop can read the selection without @MainActor).
 

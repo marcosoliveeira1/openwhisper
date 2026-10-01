@@ -34,10 +34,18 @@ final class AppModel: ObservableObject {
     private var targetPID: pid_t?
     /// Serial live-polish loop (one IA call at a time, in order).
     private var livePolishTask: Task<Void, Never>?
+    /// Window timer: safety net for long unpunctuated speech — every N seconds
+    /// any new tail is sent even without a pause, with polished context.
+    private var liveWindowTask: Task<Void, Never>?
+    /// Units queued for the serial loop but not yet polished (text + its
+    /// read-only context snapshot).
+    private struct LiveUnit {
+        let text: String
+        let context: String
+    }
+    private var livePendingQueue: [LiveUnit] = []
     /// Units already polished live, in send order (preview = joined).
     private var livePolishedSentences: [String] = []
-    /// Units queued for the serial loop but not yet polished.
-    private var livePendingQueue: [String] = []
     /// Raw-text prefix already sent to the IA this session. The loop only
     /// ever sends `newTail` beyond this — each word goes once, in order.
     private var liveConsumedRaw = ""
@@ -45,6 +53,10 @@ final class AppModel: ObservableObject {
     private var liveDebounceTask: Task<Void, Never>?
     /// Silence before the stable tail is sent. Internal for tests.
     var liveStabilityDelay: Duration = .seconds(3)
+    /// Window-timer override for tests. When nil, the loop uses
+    /// `liveWindowSeconds()` (Settings, default 10s).
+    var liveWindowDelay: Duration?
+    private let liveWindowSeconds: () -> Int
 
     init(
         dictation: any DictationService,
@@ -53,7 +65,8 @@ final class AppModel: ObservableObject {
         autoPaste: (any AutoPasteService)? = nil,
         polisher: (any TextPolisher)? = nil,
         isAutoPasteEnabled: @escaping () -> Bool = { false },
-        isLivePolishEnabled: @escaping () -> Bool = { true }
+        isLivePolishEnabled: @escaping () -> Bool = { true },
+        liveWindowSeconds: @escaping () -> Int = { 10 }
     ) {
         self.dictation = dictation
         self.clipboard = clipboard
@@ -62,6 +75,7 @@ final class AppModel: ObservableObject {
         self.polisher = polisher
         self.isAutoPasteEnabled = isAutoPasteEnabled
         self.isLivePolishEnabled = isLivePolishEnabled
+        self.liveWindowSeconds = liveWindowSeconds
         Task {
             await dictation.setPartialHandler { [weak self] text in
                 Task { @MainActor in
@@ -101,7 +115,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Immediate path: new stable content appeared. Sends only the part
-    /// beyond `liveConsumedRaw` (a pause tail may already cover its head).
+    /// beyond `liveConsumedRaw` (a pause tail may already cover its head),
+    /// with polished context as read-only intersection.
     private func scheduleLivePolish(for text: String) {
         guard livePolishOn, polisher?.isAvailable == true else { return }
         let (stable, _) = PolishPrompt.splitLive(text)
@@ -142,23 +157,68 @@ final class AppModel: ObservableObject {
         enqueueLive(PolishPrompt.chunk(tail))
     }
 
+    /// Window safety net: every N seconds, send any new tail even while the
+    /// user is still speaking (no pause needed). Skips fragments too small to
+    /// be worth a call; the already-polished text goes as read-only context
+    /// (intersection) so the model keeps sense across windows.
+    func polishWindowTick() {
+        guard case .recording = state, livePolishOn,
+              polisher?.isAvailable == true, !isPaused else { return }
+        let snapshot = liveTranscript
+        let tail = PolishPrompt.newTail(current: snapshot, since: liveConsumedRaw)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tail.isEmpty, PolishPrompt.isWindowWorthy(tail) else { return }
+        liveConsumedRaw = snapshot.trimmingCharacters(in: .whitespacesAndNewlines)
+        enqueueLive(PolishPrompt.chunk(tail))
+    }
+
+    private func startLiveWindowLoop() {
+        stopLiveWindowLoop()
+        liveWindowTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                let interval = await self.currentWindowInterval()
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    break
+                }
+                guard !Task.isCancelled else { break }
+                self.polishWindowTick()
+            }
+        }
+    }
+
+    private func currentWindowInterval() async -> Duration {
+        if let override = liveWindowDelay { return override }
+        let seconds = max(5, min(30, liveWindowSeconds()))
+        return .seconds(seconds)
+    }
+
+    private func stopLiveWindowLoop() {
+        liveWindowTask?.cancel()
+        liveWindowTask = nil
+    }
+
     /// Append units and run the serial loop (one IA call at a time, in order —
-    /// no overlapping requests, no stale overwrite).
+    /// no overlapping requests, no stale overwrite). Each unit carries the
+    /// polished-so-far context snapshot as read-only intersection.
     private func enqueueLive(_ units: [String]) {
         guard !units.isEmpty else { return }
-        livePendingQueue.append(contentsOf: units)
+        let context = PolishPrompt.contextTail(from: livePolishedSentences)
+        livePendingQueue.append(contentsOf: units.map { LiveUnit(text: $0, context: context) })
         guard livePolishTask == nil else { return }
         livePolishActive = true
         livePolishTask = Task { [weak self] in
             guard let self else { return }
-            while let sentence = await self.nextLiveSentence() {
+            while let unit = await self.nextLiveSentence() {
                 if Task.isCancelled { break }
                 do {
-                    let polished = try await self.polisher?.polish(sentence) ?? sentence
+                    let polished = try await self.polisher?.polish(unit.text, context: unit.context) ?? unit.text
                     await self.appendLivePolished(polished: polished)
                 } catch let error as PolishError {
                     // Consumed already advanced at enqueue time, so a failed
-                    // unit never resends live; the review screen retries it.
+                    // unit never resends live; the next window retries new words.
                     await self.setLivePolishError(error.message)
                 } catch {
                     await self.setLivePolishError("Falha na limpeza com IA: \(error.localizedDescription)")
@@ -168,7 +228,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func nextLiveSentence() async -> String? {
+    private func nextLiveSentence() async -> LiveUnit? {
         guard !livePendingQueue.isEmpty else { return nil }
         return livePendingQueue.removeFirst()
     }
@@ -258,6 +318,7 @@ final class AppModel: ObservableObject {
         livePolishTask = nil
         liveDebounceTask?.cancel()
         liveDebounceTask = nil
+        stopLiveWindowLoop()
         livePendingQueue = []
         liveConsumedRaw = ""
         livePolishedSentences = []
@@ -288,6 +349,7 @@ final class AppModel: ObservableObject {
         levelSamples = Array(repeating: 0.08, count: 12)
         targetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         state = .recording(startedAt: Date())
+        if livePolishOn { startLiveWindowLoop() }
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -311,6 +373,7 @@ final class AppModel: ObservableObject {
         livePolishTask = nil
         liveDebounceTask?.cancel()
         liveDebounceTask = nil
+        stopLiveWindowLoop()
         livePendingQueue = []
         livePolishActive = false
         state = .transcribing

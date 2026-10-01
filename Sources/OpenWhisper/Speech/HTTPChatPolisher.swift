@@ -52,6 +52,10 @@ final class HTTPChatPolisher: TextPolisher, Sendable {
     }
 
     func polish(_ text: String) async throws -> String {
+        try await polish(text, context: "")
+    }
+
+    func polish(_ text: String, context: String) async throws -> String {
         if let reason = availabilityMessage {
             throw PolishError.unavailable(reason)
         }
@@ -71,7 +75,7 @@ final class HTTPChatPolisher: TextPolisher, Sendable {
             model: config.model,
             messages: [
                 ChatMessage(role: "system", content: PolishPrompt.instructions),
-                ChatMessage(role: "user", content: PolishPrompt.prompt(for: text)),
+                ChatMessage(role: "user", content: PolishPrompt.promptWithContext(text, context: context)),
             ],
             temperature: 0
         ))
@@ -115,7 +119,11 @@ final class RoutingPolisher: TextPolisher, Sendable {
         let reason: String
         var isAvailable: Bool { false }
         var availabilityMessage: String? { reason }
-        func polish(_ text: String) async throws -> String {
+    func polish(_ text: String) async throws -> String {
+        try await polish(text, context: "")
+    }
+
+    func polish(_ text: String, context: String) async throws -> String {
             throw PolishError.unavailable(reason)
         }
     }
@@ -147,5 +155,9 @@ final class RoutingPolisher: TextPolisher, Sendable {
 
     func polish(_ text: String) async throws -> String {
         try await backend().polish(text)
+    }
+
+    func polish(_ text: String, context: String) async throws -> String {
+        try await backend().polish(text, context: context)
     }
 }

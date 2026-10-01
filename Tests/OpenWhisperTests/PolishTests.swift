@@ -9,13 +9,19 @@ final class MockPolisher: TextPolisher, @unchecked Sendable {
     var result: String?
     var failure: PolishError?
     private(set) var polishedInputs: [String] = []
+    private(set) var polishedContexts: [String] = []
     var delay: Duration = .zero
 
     var isAvailable: Bool { available }
     var availabilityMessage: String? { available ? nil : unavailableMessage }
 
     func polish(_ text: String) async throws -> String {
+        try await polish(text, context: "")
+    }
+
+    func polish(_ text: String, context: String) async throws -> String {
         polishedInputs.append(text)
+        polishedContexts.append(context)
         if delay > .zero {
             try? await Task.sleep(for: delay)
         }
@@ -121,6 +127,50 @@ final class MockPolisher: TextPolisher, @unchecked Sendable {
     @Test func newTailRestartsAfterDivergence() {
         #expect(PolishPrompt.newTail(current: "ola planeta", since: "ola mundo") == "planeta")
     }
+
+    @Test func promptWithContextEmptyFallsBackToPlain() {
+        #expect(PolishPrompt.promptWithContext("alô testando", context: "") == PolishPrompt.prompt(for: "alô testando"))
+        #expect(PolishPrompt.promptWithContext("alô testando", context: "  \n ") == PolishPrompt.prompt(for: "alô testando"))
+    }
+
+    @Test func promptWithContextIncludesBothAndGuard() {
+        let prompt = PolishPrompt.promptWithContext("parte nova aqui", context: "Frase anterior polida.")
+        #expect(prompt.contains("parte nova aqui"))
+        #expect(prompt.contains("Frase anterior polida."))
+        #expect(prompt.contains("do NOT repeat"))
+    }
+
+    @Test func contextTailEmptyWhenNothingPolished() {
+        #expect(PolishPrompt.contextTail(from: []) == "")
+        #expect(PolishPrompt.contextTail(from: [], maxChars: 100) == "")
+    }
+
+    @Test func contextTailReturnsAllWhenShort() {
+        #expect(PolishPrompt.contextTail(from: ["Primeira.", "Segunda?"]) == "Primeira. Segunda?")
+    }
+
+    @Test func contextTailTruncatesLongHistory() {
+        let long = String(repeating: "palavra ", count: 100)
+        let tail = PolishPrompt.contextTail(from: [long])
+        #expect(tail.count <= 300)
+        #expect(long.hasSuffix(tail))
+    }
+
+    @Test func contextTailZeroMaxCharsIsEmpty() {
+        #expect(PolishPrompt.contextTail(from: ["Algo."], maxChars: 0) == "")
+    }
+
+    @Test func isWindowWorthyRejectsFragments() {
+        #expect(!PolishPrompt.isWindowWorthy(""))
+        #expect(!PolishPrompt.isWindowWorthy("oi"))
+        #expect(!PolishPrompt.isWindowWorthy("falando ainda"))
+        #expect(!PolishPrompt.isWindowWorthy("ola mundo"))
+    }
+
+    @Test func isWindowWorthyAcceptsRealSpeech() {
+        #expect(PolishPrompt.isWindowWorthy("ola mundo sem ponto"))
+        #expect(PolishPrompt.isWindowWorthy("vou fazer o deploy do endpoint amanhã"))
+    }
 }
 
 @Suite @MainActor struct PolishFlowTests {
@@ -223,13 +273,15 @@ final class MockPolisher: TextPolisher, @unchecked Sendable {
 
     private func recordingModel(
         polisher: MockPolisher = MockPolisher(),
-        liveEnabled: Bool = true
+        liveEnabled: Bool = true,
+        windowDelay: Duration? = nil
     ) async -> (AppModel, MockDictationService, MockPolisher) {
         let speech = MockDictationService()
         let model = AppModel(
             dictation: speech, clipboard: MockClipboard(), store: makeStore(),
             polisher: polisher, isLivePolishEnabled: { liveEnabled }
         )
+        model.liveWindowDelay = windowDelay
         await model.toggle()
         await waitUntil(speech.startCount == 1)
         await waitUntil(speech.partialHandler != nil)
@@ -337,5 +389,79 @@ final class MockPolisher: TextPolisher, @unchecked Sendable {
         // Pause tail + only the new part — "ola mundo" polished once.
         #expect(polisher.polishedInputs == ["ola mundo", "tudo bem."])
         await model.cancel()
+    }
+
+    @Test func windowTickSendsTailWithoutPause() async {
+        let (model, speech, polisher) = await recordingModel()
+        speech.emitPartial("vou fazer o deploy do endpoint amanhã")
+        await waitUntil(model.liveTranscript == "vou fazer o deploy do endpoint amanhã")
+        await model.polishWindowTick()
+        await waitUntil(model.livePolishedText == "vou fazer o deploy do endpoint amanhã")
+        #expect(polisher.polishedInputs == ["vou fazer o deploy do endpoint amanhã"])
+        await model.cancel()
+    }
+
+    @Test func windowTickSkipsTinyFragment() async {
+        let (model, speech, polisher) = await recordingModel()
+        speech.emitPartial("oi")
+        await waitUntil(model.liveTranscript == "oi")
+        await model.polishWindowTick()
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(polisher.polishedInputs.isEmpty)
+        await model.cancel()
+    }
+
+    @Test func windowTickSendsNothingWhenNothingNew() async {
+        let (model, speech, polisher) = await recordingModel()
+        speech.emitPartial("vou fazer o deploy do endpoint amanhã")
+        await waitUntil(model.liveTranscript == "vou fazer o deploy do endpoint amanhã")
+        await model.polishWindowTick()
+        await waitUntil(polisher.polishedInputs.count == 1)
+        await model.polishWindowTick()
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(polisher.polishedInputs.count == 1)
+        await model.cancel()
+    }
+
+    @Test func windowTickCarriesPriorContext() async {
+        let (model, speech, polisher) = await recordingModel()
+        speech.emitPartial("Primeira frase fechada.")
+        await waitUntil(model.livePolishedText == "Primeira frase fechada.")
+        #expect(polisher.polishedContexts.first == "")
+        speech.emitPartial("Primeira frase fechada. continuando o raciocínio sem ponto final")
+        await waitUntil(model.liveTranscript == "Primeira frase fechada. continuando o raciocínio sem ponto final")
+        await model.polishWindowTick()
+        await waitUntil(polisher.polishedInputs.count == 2)
+        #expect(polisher.polishedInputs[1] == "continuando o raciocínio sem ponto final")
+        #expect(polisher.polishedContexts[1] == "Primeira frase fechada.")
+        await model.cancel()
+    }
+
+    @Test func windowTickSkippedWhenPaused() async {
+        let (model, speech, polisher) = await recordingModel()
+        speech.emitPartial("vou fazer o deploy do endpoint amanhã")
+        await waitUntil(model.liveTranscript == "vou fazer o deploy do endpoint amanhã")
+        await model.togglePause()
+        await model.polishWindowTick()
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(polisher.polishedInputs.isEmpty)
+        await model.cancel()
+    }
+
+    @Test func windowLoopFiresAutomatically() async {
+        let (model, speech, polisher) = await recordingModel(windowDelay: .milliseconds(50))
+        speech.emitPartial("vou fazer o deploy do endpoint amanhã de manhã")
+        await waitUntil(!polisher.polishedInputs.isEmpty, timeout: .seconds(3))
+        #expect(polisher.polishedInputs == ["vou fazer o deploy do endpoint amanhã de manhã"])
+        await model.cancel()
+    }
+
+    @Test func windowLoopStoppedOnFinish() async {
+        let (model, speech, polisher) = await recordingModel(windowDelay: .milliseconds(50))
+        speech.finishResult = "texto final aqui agora"
+        await model.finish()
+        await waitUntil(model.state == .idle)
+        // Loop must not fire after finish — no live sends on the final text.
+        #expect(polisher.polishedInputs.isEmpty)
     }
 }
