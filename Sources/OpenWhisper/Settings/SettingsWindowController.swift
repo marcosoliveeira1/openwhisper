@@ -67,8 +67,85 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Inteligência Artificial") {
+                Picker("Provedor", selection: $aiProviderRaw) {
+                    ForEach(AIProvider.allCases, id: \.rawValue) { provider in
+                        Text(provider.title).tag(provider.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: aiProviderRaw) { _, newValue in
+                    AppSettings.aiProviderRaw = newValue
+                    loadGatewayFields()
+                }
+                Text(providerDescription(for: selectedProvider))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
+                    Text(statusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !selectedProvider.isLocal {
+                    TextField("URL base", text: $gatewayBaseURL, prompt: Text(selectedProvider.defaultBaseURL ?? "https://…"))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        .onChange(of: gatewayBaseURL) { _, _ in
+                            saveGatewayFields()
+                        }
+                        .help("Endpoint OpenAI-compatível (até /v1)")
+                    SecureField("Chave API", text: $gatewayKey, prompt: Text("Bearer token"))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        .onChange(of: gatewayKey) { _, _ in
+                            saveGatewayFields()
+                        }
+                    TextField("Modelo", text: $gatewayModel, prompt: Text(selectedProvider.defaultModel))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        .font(.system(.body, design: .monospaced))
+                        .onChange(of: gatewayModel) { _, _ in
+                            saveGatewayFields()
+                        }
+                    if !selectedProvider.suggestedModels.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(selectedProvider.suggestedModels, id: \.self) { suggestion in
+                                Button(suggestion) {
+                                    gatewayModel = suggestion
+                                    saveGatewayFields()
+                                }
+                                .buttonStyle(.link)
+                                .font(.system(.caption, design: .monospaced))
+                            }
+                            Spacer()
+                            Button("Restaurar padrão") {
+                                gatewayModel = selectedProvider.defaultModel
+                                gatewayBaseURL = selectedProvider.defaultBaseURL ?? ""
+                                saveGatewayFields()
+                            }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                        }
+                    }
+                    Text(gatewayHint(for: selectedProvider))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Toggle("Limpeza ao vivo", isOn: $livePolishEnabled)
+                    .onChange(of: livePolishEnabled) { _, newValue in
+                        onLivePolishChanged(newValue)
+                    }
+                Text("Mostra o texto corrigido abaixo do original enquanto você fala. Só frases fechadas vão para a IA, uma por vez.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Atalho global") {
-                LabeledContent("Ativar ditado") {
+                HStack {
+                    Text("Ativar ditado")
+                    Spacer()
                     HotKeyRecorderField(
                         keyCode: $hotKeyCode,
                         modifiers: $hotKeyModifiers,
@@ -78,10 +155,28 @@ struct SettingsView: View {
                     )
                     .frame(width: 150)
                 }
-                LabeledContent {
-                    EmptyView()
-                } label: {
-                    Text("Clique no atalho e pressione a nova combinação. Esc cancela.")
+                Text("Clique no atalho e pressione a nova combinação. Esc cancela.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Colagem") {
+                Toggle("Colar automaticamente após ditar", isOn: $autoPasteEnabled)
+                    .onChange(of: autoPasteEnabled) { _, newValue in
+                        onAutoPasteChanged(newValue)
+                    }
+                Text("Cola o texto no app que estava em foco ao iniciar o ditado. Requer permissão de Acessibilidade.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !accessibilityTrusted {
+                    HStack {
+                        Text("Permissão pendente")
+                            .foregroundStyle(.orange)
+                        Spacer()
+                        Button("Abrir Ajustes de Acessibilidade") {
+                            CGEventAutoPasteService.openAccessibilitySettings()
+                        }
+                    }
+                    Text("Ativou e continua pendente? Cada `make app` gera um binário novo e o macOS invalida o grant: remova o OpenWhisper da lista com (–), reabra o app e ative de novo. O texto é sempre copiado (⌘V manual funciona); só a colagem automática precisa dessa permissão.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -95,7 +190,7 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 240)
+                    .frame(width: 260)
                     .onChange(of: appearance) { _, newValue in
                         onAppearanceChanged(newValue)
                     }
@@ -109,100 +204,10 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 240)
+                    .frame(width: 260)
                     .onChange(of: panelOpacity) { _, newValue in
                         onPanelOpacityChanged(newValue)
                     }
-                }
-            }
-            Section("Colagem") {
-                LabeledContent("Após ditar") {
-                    Toggle("Colar automaticamente", isOn: $autoPasteEnabled)
-                        .onChange(of: autoPasteEnabled) { _, newValue in
-                            onAutoPasteChanged(newValue)
-                        }
-                }
-                LabeledContent {
-                    EmptyView()
-                } label: {
-                    Text("Cola o texto no app que estava em foco ao iniciar o ditado. Requer permissão de Acessibilidade.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if !accessibilityTrusted {
-                    LabeledContent {
-                        Button("Abrir Ajustes de Acessibilidade") {
-                            CGEventAutoPasteService.openAccessibilitySettings()
-                        }
-                    } label: {
-                        Text("Permissão pendente")
-                            .foregroundStyle(.orange)
-                    }
-                    LabeledContent {
-                        EmptyView()
-                    } label: {
-                        Text("Ativou e continua pendente? Cada `make app` gera um binário novo e o macOS invalida o grant: remova o OpenWhisper da lista com (–), reabra o app e ative de novo. O texto é sempre copiado (⌘V manual funciona); só a colagem automática precisa dessa permissão.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            Section("IA") {
-                LabeledContent("Provedor") {
-                    Picker("", selection: $aiProviderRaw) {
-                        ForEach(AIProvider.allCases, id: \.rawValue) { provider in
-                            Text(provider.title).tag(provider.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 240)
-                    .onChange(of: aiProviderRaw) { _, newValue in
-                        AppSettings.aiProviderRaw = newValue
-                        loadGatewayFields()
-                    }
-                }
-                if let provider = AIProvider(rawValue: aiProviderRaw), !provider.isLocal {
-                    LabeledContent("URL base") {
-                        TextField(provider.defaultBaseURL ?? "https://…", text: $gatewayBaseURL)
-                            .frame(width: 240)
-                            .onChange(of: gatewayBaseURL) { _, _ in
-                                saveGatewayFields()
-                            }
-                    }
-                    LabeledContent("Chave API") {
-                        SecureField("Bearer token", text: $gatewayKey)
-                            .frame(width: 240)
-                            .onChange(of: gatewayKey) { _, _ in
-                                saveGatewayFields()
-                            }
-                    }
-                    LabeledContent("Modelo") {
-                        TextField(provider.defaultModel.isEmpty ? "model-id" : provider.defaultModel, text: $gatewayModel)
-                            .frame(width: 240)
-                            .onChange(of: gatewayModel) { _, _ in
-                                saveGatewayFields()
-                            }
-                    }
-                    LabeledContent {
-                        EmptyView()
-                    } label: {
-                        Text(gatewayHint(for: provider))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                LabeledContent("Durante a fala") {
-                    Toggle("Limpeza ao vivo", isOn: $livePolishEnabled)
-                        .onChange(of: livePolishEnabled) { _, newValue in
-                            onLivePolishChanged(newValue)
-                        }
-                }
-                LabeledContent {
-                    EmptyView()
-                } label: {
-                    Text("Mostra o texto corrigido abaixo do original enquanto você fala. Só frases fechadas vão para a IA, uma por vez.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
             Section("Histórico") {
@@ -234,7 +239,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 440)
+        .frame(width: 560)
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             accessibilityTrusted = CGEventAutoPasteService.isTrusted()
         }
@@ -247,6 +252,35 @@ struct SettingsView: View {
 
     private var selectedProvider: AIProvider {
         AIProvider(rawValue: aiProviderRaw) ?? .apple
+    }
+
+    private var gatewayConfigured: Bool {
+        if selectedProvider.isLocal { return true }
+        return !gatewayBaseURL.trimmingCharacters(in: .whitespaces).isEmpty
+            && !gatewayKey.trimmingCharacters(in: .whitespaces).isEmpty
+            && !gatewayModel.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var statusColor: Color {
+        gatewayConfigured ? .green : .orange
+    }
+
+    private var statusText: String {
+        if selectedProvider.isLocal { return "Pronto — roda no aparelho, sem chave." }
+        return gatewayConfigured ? "Configurado — limpeza com IA ativa." : "Falta URL, chave ou modelo."
+    }
+
+    private func providerDescription(for provider: AIProvider) -> String {
+        switch provider {
+        case .apple:
+            return "Apple Intelligence no aparelho (macOS 26+). Privado, sem chave."
+        case .openRouter:
+            return "Gateway OpenAI-compatível com centenas de modelos. Rápido de configurar."
+        case .groq:
+            return "Inferência ultrarrápida. Sugestão: openai/gpt-oss-20b."
+        case .openCode:
+            return "Seu próprio gateway OpenAI-compatível: informe base URL, bearer e modelo."
+        }
     }
 
     private func loadGatewayFields() {
@@ -344,7 +378,7 @@ final class SettingsWindowController {
         )
 
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

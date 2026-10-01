@@ -34,8 +34,26 @@ enum AIProvider: String, CaseIterable, Sendable {
         switch self {
         case .apple: ""
         case .openRouter: "openai/gpt-4o-mini"
-        case .groq: "llama-3.3-70b-versatile"
+        case .groq: "openai/gpt-oss-20b"
         case .openCode: ""
+        }
+    }
+
+    /// Models the user can pick with one click in Settings. First is the default.
+    var suggestedModels: [String] {
+        switch self {
+        case .apple, .openCode: []
+        case .openRouter: ["openai/gpt-4o-mini", "openai/gpt-oss-20b"]
+        case .groq: ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
+        }
+    }
+
+    /// IDs that no longer resolve on the provider (retired or moved to
+    /// Enterprise). Stored prefs with these values fall back to `defaultModel`.
+    var retiredModels: [String] {
+        switch self {
+        case .groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        case .apple, .openRouter, .openCode: []
         }
     }
 
@@ -79,7 +97,10 @@ enum GatewayStore {
     static func config(for provider: AIProvider) -> GatewayConfig {
         let prefix = provider.rawValue
         let storedBase = defaults.string(forKey: "gatewayBaseURL_\(prefix)") ?? ""
-        let storedModel = defaults.string(forKey: "gatewayModel_\(prefix)") ?? ""
+        var storedModel = defaults.string(forKey: "gatewayModel_\(prefix)") ?? ""
+        if provider.retiredModels.contains(storedModel) {
+            storedModel = ""
+        }
         return GatewayConfig(
             baseURL: storedBase.isEmpty ? (provider.defaultBaseURL ?? "") : storedBase,
             apiKey: defaults.string(forKey: "gatewayKey_\(prefix)") ?? "",

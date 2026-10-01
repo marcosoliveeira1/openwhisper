@@ -127,7 +127,7 @@ private func withGateway(
         #expect(AIProvider.groq.defaultBaseURL == "https://api.groq.com/openai/v1")
         #expect(AIProvider.openCode.defaultBaseURL == nil)
         #expect(AIProvider.openRouter.defaultModel == "openai/gpt-4o-mini")
-        #expect(!AIProvider.groq.defaultModel.isEmpty)
+        #expect(AIProvider.groq.defaultModel == "openai/gpt-oss-20b")
         #expect(AIProvider.openCode.defaultModel.isEmpty)
         #expect(AIProvider.openRouter.extraHeaders["X-Title"] == "OpenWhisper")
         #expect(AIProvider.groq.extraHeaders.isEmpty)
@@ -140,6 +140,19 @@ private func withGateway(
             #expect(config.baseURL == "https://api.groq.com/openai/v1")
             #expect(!config.model.isEmpty)
             #expect(config.apiKey.isEmpty)
+        }
+    }
+
+    @Test func retiredGroqModelFallsBackToDefault() async {
+        await withGateway(.groq, config: GatewayConfig(
+            baseURL: "", apiKey: "k", model: "llama-3.3-70b-versatile"
+        )) {
+            #expect(GatewayStore.config(for: .groq).model == "openai/gpt-oss-20b")
+        }
+        await withGateway(.groq, config: GatewayConfig(
+            baseURL: "", apiKey: "k", model: "llama-3.1-8b-instant"
+        )) {
+            #expect(GatewayStore.config(for: .groq).model == "openai/gpt-oss-20b")
         }
     }
 
